@@ -25,31 +25,25 @@ Contribuez !
 
 Voici quelques conseils si vous voulez contribuer au projet.
 
-- D'abord, repérez les 3 fichiers du projet :
+- Repérez les différents fichiers du projet :
     * **hybridoa.user.js** est le fichier principal. Il est documenté à
-       l'intérieur.
+      l'intérieur.
     * **hybridoa.html** contient la mise en page de remplacement, qui
-       est injectée dans le DOM au chargement de la page.
+      est injectée dans le DOM au chargement de la page.
     * **hybridoa.css** est la feuille de style associée.
+    * Les fichiers de langue (à venir).
+    * Éventuellement des fichiers de modules si le fichier source
+      principal devient trop gros. Ils seront concaténés avec un script
+      shell.
 
-- Ensuite, je cherche à rendre mon script compatible avec tous les
-    gestionnaires d'userscripts. Certains sont des extensions, comme
-    Tampermonkey pour Chrome, d'autres sont intégrés nativement au
-    navigateur, comme pour Opera.
-    
-    La compatibilité passe par le retrait de tous les appels aux
-    fonctions `GM_*` de l'API Greasemonkey. Cela implique d'abandonner
-    `GM_xmlhttpRequest` qui permet de faire des requêtes cross-domain ;
-    je n'ai pas encore vérifié si cela était possible. Il faudra aussi
-    abandonner le système de ressources, et par conséquent concaténer
-    les 3 fichiers en un seul (je ferai un make ou un script shell
-    pour automatiser ça).
-    
-    Si l'abandon de l'API `GM_*` est possible, alors il faudra remplacer
-    toutes les formes de syntaxe « trop modernes » par leur équivalent
-    traditionnel. Par exemple, `Array.forEach(…)` par
-    `Array.prototype.forEach.call(…)`, ou encore `function( x ) x + 2;`
-    par `function( x ){ return x + 2; }`.
-    
-    Sinon HybriDoA ne marchera que sous Firefox, ce qui nous permettra
-    de développer dans un environnement plus confortable.
+- Le script tourne en mode strict. Plus d'infos :
+   * [sur la doc du MSDN (fr)](http://msdn.microsoft.com/fr-fr/library/ie/br230269%28v=vs.94%29.aspx)
+   * [sur le blog de John Resig (en)](http://ejohn.org/blog/ecmascript-5-strict-mode-json-and-more/)
+
+- Je sais qu'il est possible de dialoguer avec les différents serveurs du
+   jeu sans utiliser `GM_xmlhttpRequest`, le script Kabalistics de Jawz le
+   fait. Ainsi, il devrait être possible de rendre HybriDoA compatible avec
+   d'autres navigateurs que Firefox.
+   Je cherche des gens pour m'aider dans cette quête. Si vous vous y
+   connaissez en développement de userscripts (de préférence natifs) pour
+   Chrome ou Opera, vous êtes les bienvenus !
