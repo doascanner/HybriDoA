@@ -4,30 +4,26 @@
 // @version       0.0
 // @description   Projet de remplacer le SWF par du pur HTML5/JavaScript
 // 
+// @include       https://www.kabam.com/fr/games/dragons-of-atlantis/play*
 // @match         https://*.castle.wonderhill.com/platforms/kabam/*
-// @match         https://www.kabam.com/fr/games/dragons-of-atlantis/play*
-// @noframes
 // @exclude       *?gm=no*
 // @exclude       *&gm=no*
 // 
-// @author        Watilin
-// @copyright     2013+, Watilin
-// @license       Creative Commons by-nc-sa
-// @homepage      http://kergoz-panik.fr/watilin/userscripts/hybridoa/
 // @icon          hybridoa.png
-// 
 // @resource      html     hybridoa.html
 // @resource      style    hybridoa.css
 //
+// @run-at        document-start
 // @grant         GM_xmlhttpRequest
 // @grant         GM_getResourceText
-// @grant         GM_addStyle
-// @grant         GM_getValue
-// @grant         GM_setValue
-// @grant         GM_log
+// 
+// @homepage      https://github.com/Watilin/HybriDoA#hybridoa
+// @author        Watilin
+// @copyright     2013+, Watilin
+// @license       Creative Commons by-nc-sa
 // ==/UserScript==
 
-/* >>>>>>>>>>>>>>>> IMPORTANT! <<<<<<<<<<<<<<<<<<<<<<<
+/* >>>>>>>>>>>>>>>>>>>>>>> IMPORTANT! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
 Ce script est actuellement une ÉBAUCHE. Il me sert à tester la
 faisabilité de mes objectifs. Il comporte des fonctionnalités qui ne
@@ -41,6 +37,10 @@ perhaps even security flaws. DO NOT INSTALL IT unless you want to follow
 up my work or get inspired by it.
 */
 
+/* Marqueurs :
+   todo, xxx, debug, here, i18n
+*/
+
 /* TODO
 Vues
    - une vue de la ville principale (bâtiments & niveaux)
@@ -51,7 +51,6 @@ Vues
    
 Actions
    - construction/amélioration de bâtiments
-   - Fortuna
    - lancement de marches
    - entraînement de troupes
    - recherches
@@ -79,26 +78,58 @@ Style
 Les sections sont étiquetées avec un arobase (@). Utilisez la
 fonction recherche pour naviguer entre les sections. Par exemple,
 pour la section [XYZ], tapez « @XYZ ».
+  [NAV] Détection du navigateur
   [DBG] Utilitaires de débogage
   [UTI] Divers utilitaires
   [WIN] Constructeur Window
   [MOD] Modules
-  [ACT] Actions au chargement de la page
+  [INI] Initialisation du script
   [AJX] Primitives Ajax
   [SHA] Implémentation JavaScript du Sha-1
 */
 
-// GreaseMonkey ne reconnait pas @noframes
-if (top === window) {
+"use strict";
+
+// [@NAV] Détection du navigateur //////////////////////////////////////
+
+var ua = navigator.userAgent;
+const FIREFOX = ua.search(/firefox/i) >= 0;
 
 // [@DBG] Utilitaires de débogage //////////////////////////////////////
 
 // affiche l'objet dans la console disponible
-function debug( obj ){
-   var c = unsafeWindow.console || console || {};
-   var dbg = c.debug || c.log || GM_log;
-   dbg(obj);
-}
+var debug = (function( ){
+   var c = unsafeWindow.console || console;
+   if (c) return c.debug || c.log;
+   
+   var $console;
+   var firstLogs = [];
+   var isInserted = false;
+   $console = document.createElement("pre");
+   $console.id = "console";
+   document.addEventListener("DOMContentLoaded", function( ){
+      document.body.appendChild($console);
+      isInserted = true;
+      firstMessages.forEach(function( message ){ debug(message); });
+   }, false);
+   
+   function debug( message ){
+      if (isInserted) {
+         var $message = document.createElement("div");
+         var $time = document.createElement("time");
+         var $child = $console.firstChild;
+         $time.textContent = new Date().toLocaleTimeString();
+         $message.appendChild($time);
+         $message.appendChild(document.createTextNode(message));
+         if ($child) $console.insertBefore($message, $child);
+         else $console.appendChild($message);
+      } else {
+         firstMessages.push(message);
+      }
+   }
+   
+   return debug;
+}());
 
 // rend visible l'objet dans le contexte de la page
 var expose = (function( ){
@@ -197,6 +228,30 @@ Number.prototype.pad = function pad( digits ){
    else
       return str;
 }
+
+// Gestion des attributs DOM
+var Attribute = {
+   remove: function( $element, attributes ){
+      attributes = attributes instanceof Array ?
+         attributes : Array.slice(arguments, 1);
+      Array.forEach(attributes, function( arg ){
+         var attr = "" + arg;
+         if ($element.hasAttribute(attr))
+            $element.removeAttribute(attr);
+      });
+   },
+   removeAll: function( $element, except ){
+      except = except instanceof Array ?
+         except : Array.slice(arguments, 1);
+      except = except.map(function( item ) "" + item).sort();
+      var attributes = Array.map($element.attributes,
+         function( attr ) attr);
+      Array.forEach(attributes, function( attr ){
+         var name = attr.name;
+         if (except.indexOf(name) < 0) $element.removeAttribute(name); 
+      });
+   }
+};
 
 // [@WIN] Constructeur Window //////////////////////////////////////////
 
@@ -324,7 +379,7 @@ Window.prototype = {
     * @param {string} message   le message d’erreur
     * @param {function} next    (optionnel) l’action à exécuter
     */
-   error: function( title, message, next ){
+   error: function error( title, message, next ){
       this.$shader.style.display = "block";
       
       var $spinner = this.$spinner;
@@ -338,8 +393,8 @@ Window.prototype = {
       var w = this;
       var $window = w.$window;
       setTimeout(function( ){
-         $window.style.width = $error.offsetWidth + "px";
-         $window.style.height = $error.offsetHeight + "px";
+         $window.style.minWidth = $error.offsetWidth + "px";
+         $window.style.minHeight = $error.offsetHeight + "px";
       }, 0);
       
       function click( ){
@@ -347,8 +402,8 @@ Window.prototype = {
          $error.style.display = "none";
          $spinner.style.display = "";
          w.$shader.style.display = "none";
-         $window.style.width = "";
-         $window.style.height = "";
+         $window.style.minWidth = "";
+         $window.style.minHeight = "";
          if (next) next(w);
       }
       $error.querySelector("a.button").
@@ -491,145 +546,198 @@ new Module("Royaume", function( w ){
    
    function refreshRealms( ){
       ajaxGet("/platforms/kabam/lightboxes/change_realm", {
-            signed_request: Ajaxvars.signedRequest,
-            i18n_locale: selectedLocale
-         }, function( r ){
-            var contents = [];
-            
-            var $select = document.createElement("select");
-            var $option;
-            for (var loc in locales) {
-               $option = document.createElement("option");
-               $option.value = loc;
-               $option.textContent = locales[loc];
-               if (loc == selectedLocale) $option.selected = true; 
-               $select.appendChild($option);
-            }
-            
-            var $label = document.createElement("label");
-            $label.textContent = "Langue\xa0: ";
-            $label.appendChild($select);
-            var $p = document.createElement("p");
-            $p.appendChild($label);
-            var $ok = document.createElement("a");
-            ClassName.add($ok, "button small");
-            $ok.textContent = "Ok";
-            $ok.title = "Valider le changement de la langue"
-            $ok.addEventListener("click", function( ){
-               var loc = $select.options[$select.selectedIndex].value;
-               ajaxPost(location.href, {
-                  i18n_locale: loc
-               }, function( r ){
-                  selectedLocale = loc;
-                  w.wait();
-                  refreshRealms();
-               });
-            }, false);
-            $p.appendChild(document.createTextNode(" "));
-            $p.appendChild($ok);
-            contents.push($p);
-            
-            var $div = document.createElement("div");
-            $div.innerHTML = r.responseText;
-            var rawText = $div.textContent;
-            
-            var $table = document.createElement("table");
-            var $headRow = $table.createTHead().insertRow(-1);
-            var $tbody = document.createElement("tbody");
-            $table.appendChild($tbody);
-            
-            var regexp = /^\S.*$/gm;
-            var match;
-            var $th;
-            var $row;
-            var $td;
-            for (var i = -2; match = regexp.exec(rawText); i++) {
-               if (i < 0) continue;
-               if (i < 5) {
-                  $th = document.createElement("th");
-                  $th.textContent = match[0];
-                  $headRow.appendChild($th);
-               } else {
-                  if (match[0].indexOf("Each Realm") >= 0) break;
-                  if (!(i % 5)) $row = $tbody.insertRow(-1);
-                  $td = $row.insertCell(-1);
-                  $td.textContent = match[0];
-               }
-            }
-            
-            var $selectedRealm;
-            $table.addEventListener("click", function( event ){
-               var $target = event.target;
-               if ("TD" == $target.tagName) {
-                  if ($selectedRealm) {
-                     ClassName.remove($selectedRealm,
-                        "selected-realm");
+         signed_request: Ajaxvars.signedRequest,
+         i18n_locale: selectedLocale
+      }, function( r ){
+         var contents = [];
+         
+         var $select = document.createElement("select");
+         var $option;
+         for (var loc in locales) {
+            $option = document.createElement("option");
+            $option.value = loc;
+            $option.textContent = locales[loc];
+            if (loc == selectedLocale) $option.selected = true;
+            $select.appendChild($option);
+         }
+         
+         var $label = document.createElement("label");
+         $label.textContent = "Langue\xa0: ";
+         $label.appendChild($select);
+         var $p = document.createElement("p");
+         $p.appendChild($label);
+         var $ok = document.createElement("a");
+         ClassName.add($ok, "button small");
+         $ok.textContent = "Ok";
+         $ok.title = "Valider le changement de la langue"
+         $ok.addEventListener("click", function( ){
+            var loc = $select.options[$select.selectedIndex].value;
+            ajaxPost(location.href, {
+               i18n_locale: loc
+            }, function( r ){
+               selectedLocale = loc;
+               w.wait();
+               refreshRealms();
+            });
+         }, false);
+         $p.appendChild(document.createTextNode(" "));
+         $p.appendChild($ok);
+         contents.push($p);
+         
+         var $div = document.createElement("div");
+         $div.innerHTML = r.responseText;
+         var rawText = $div.textContent;
+         
+         var $table = document.createElement("table");
+         var $headRow = $table.createTHead().insertRow(-1);
+         var $tbody = document.createElement("tbody");
+         $table.appendChild($tbody);
+         
+         var regexp = /^\S.*$/gm;
+         var match;
+         var $th;
+         var $row;
+         var $td;
+         var realmId;
+         var currentRealmId;
+         var selectedRealmId;
+         var $selectedRealm;
+         
+         for (var i = -2; match = regexp.exec(rawText); i++) {
+            if (i < 0) continue;
+            if (i < 5) {
+               $th = document.createElement("th");
+               $th.textContent = match[0];
+               $headRow.appendChild($th);
+            } else {
+               if (!(i % 5)) {
+                  realmId = parseInt(match[0], 10);
+                  if (!realmId) break;
+                  $row = $tbody.insertRow(-1);
+                  if (realmId ==
+                        location.hostname.match(/realm(\d+)/)[1]) {
+                     ClassName.add($row, "selected-realm");
+                     $selectedRealm = $row;
+                     currentRealmId = realmId;
                   }
-                  var $tr = $target.parentNode;
-                  ClassName.add($tr, "selected-realm");
-                  $selectedRealm = $tr;
                }
-            }, false);
-            
-            var $box = document.createElement("div");
-            ClassName.add($box, "limited-height");
-            $box.appendChild($table);
-            contents.push($box);
-            
-            var $ok = document.createElement("a");
-            ClassName.add($ok, "button");
-            $ok.textContent = "Ok";
-            $ok.title = "Valider le changement de royaume"
-            
-            $ok.addEventListener("click", function( ){
-               if ($selectedRealm) {
-                  w.wait();
-                  var realmId = $selectedRealm.firstChild.textContent;
-                  ajaxPost(Ajaxvars.serverUrl +
-                     "/platforms/kabam/change_realm/" + realmId,
-                     {},
-                     function( r ){
-                        var json = JSON.parse(r.responseText);
-                        console.log(json);
-                        if (json.realmwiseurl) {
-                           ajaxPost(json.realmwiseurl, {}, function( r2 ){
-                              var json2 = JSON.parse(r2.responseText);
-                              console.log(json2);
-                              if ("true" == json2.success) {
-                                 location.href = Ajaxvars.appPath;
-                              } else {
-                                 console.debug(json2);
-                                 w.error("Erreur", "La requête 2 a échoué");
-                              }
-                           });
+               $td = $row.insertCell(-1);
+               $td.textContent = match[0];
+            }
+         }
+         
+         $table.addEventListener("click", function( event ){
+            var $target = event.target;
+            if ("td" != $target.tagName.toLowerCase()) return;
+            if ($selectedRealm)
+               ClassName.remove($selectedRealm, "selected-realm");
+            var $tr = $target.parentNode;
+            ClassName.add($tr, "selected-realm");
+            $selectedRealm = $tr;
+            selectedRealmId = $tr.firstChild.textContent * 1;
+            ClassName[selectedRealmId == currentRealmId ?
+               "add" : "remove"]($ok, "disabled");
+         }, false);
+         
+         var $box = document.createElement("div");
+         ClassName.add($box, "limited-height");
+         $box.appendChild($table);
+         contents.push($box);
+         
+         var $ok = document.createElement("a");
+         ClassName.add($ok, "button disabled");
+         $ok.textContent = "Ok";
+         $ok.title = "Valider le changement de royaume"
+         
+         $ok.addEventListener("click", function( ){
+            if (ClassName.has(this, "disabled")) return;
+            w.wait();
+            var realmId = $selectedRealm.firstChild.textContent;
+            ajaxPost(Ajaxvars.serverUrl +
+               "/platforms/kabam/change_realm/" + realmId,
+               {}, function( response ){
+                  var json = JSON.parse(response.responseText);
+                  if (!json.realmwiseurl) {
+                     debug(json);
+                     w.error("Erreur",
+                        "Impossible d’obtenir l'adresse du royaume",
+                        w.close);
+                     return;
+                  }
+                  ajaxPost(json.realmwiseurl, {},
+                     function( wiseResponse ){
+                        var wiseJson =
+                           JSON.parse(wiseResponse.responseText);
+                        debug(wiseJson);
+                        if (wiseJson.success) {
+                           top.location.href = Ajaxvars.appPath;
                         } else {
-                           console.debug(json);
-                           w.error("Erreur", "La requête 1 a échoué");
+                           debug(wiseJson);
+                           w.error("Erreur",
+                              "Impossible de joindre le nouveau royaume",
+                              w.close);
                         }
                      });
-               }
-            }, false);
-            
-            var $okP = document.createElement("p");
-            $okP.appendChild($ok);
-            contents.push($okP);
-            
-            w.update(contents);
-         });
+               });
+         }, false);
+         
+         var $okP = document.createElement("p");
+         $okP.appendChild($ok);
+         contents.push($okP);
+         
+         w.update(contents);
+      });
    }
    refreshRealms();
 });
 
 new Module("Fortuna", function( w ){
    var chests = {};
-   ajaxGet(Ajaxvars.s3Server + "/flash/assets/item/thumbnails.json", {},
-      function( r ){
-         var json = JSON.parse(r.responseText);
-         for (var chestIndex in json) {
-            chests[chestIndex.toLowerCase()] =
-               json[chestIndex].replace(/\.jpg$/g, "");
-         }
+   retrieveGameData("chests", function( chestData, error ){
+      if (error) w.error("Chargement de chests.json échoué", error,
+         w.close);
+      for (var chestIndex in chestData) {
+         chests[chestIndex.toLowerCase()] =
+            chestData[chestIndex].replace(/\.jpg$/g, "");
+      }
+      // (TODO) refreshChestImages();
+   });
+   
+   function getPrizeImageSrc( prizeType ){
+      var isResource = false;
+      var isTroop = false;
+      var isChest = false;
+      var isGold = false;
+      var chunks = prizeType.match(/\d+|[A-Z][a-z]*|[a-z]+/g);
+      var num;
+      var image;
+      var dir;
+      var chestName;
+      
+      chunks.forEach(function( chunk ){
+         if ("K" == chunk) isResource = isResource || true;
+         if ("Troop" == chunk) isTroop = isTroop || true;
+         if ("Chest" == chunk) isChest = isChest || true;
+         if ("Gold" == chunk) isGold = isGold || true;
+         if ("Stack" == chunk) isTroop = false;
+         if (!isNaN(chunk)) num = chunk;
       });
+      if (isTroop) {
+         dir = "troops/";
+         image = chunks.slice(0, chunks.indexOf(num)).join("");
+      } else {
+         dir = "item/";
+         if (isResource) {
+            if (isGold) image = "gold";
+            else        image = chunks[0].toLowerCase() + "50k";
+         } else if (isChest) {
+            chestName = "configurablechest" + num;
+            image = chests[chestName] || "configurablechest";
+         }
+         else image = chunks.join("").toLowerCase();
+      }
+      return Ajaxvars.s3Server + "/flash/assets/" + dir + image + ".jpg";
+   }
 
    function requestList( e, ticketType ){
       ticketType = ticketType || e.target.dataset.ticketType;
@@ -657,6 +765,9 @@ new Module("Fortuna", function( w ){
                if (!(i % 3)) $row = $table.insertRow(-1);
                $cell = $row.insertCell(-1);
                
+               /* TODO weight et weightSum serviront à calculer la
+               probabilité d'obtenir le(s) objet(s) préalablement
+               désignés par le joueur */
                var weight = prize.weight;
                $cell.setAttribute("data-weight", weight);
                weightSum += weight;
@@ -666,15 +777,7 @@ new Module("Fortuna", function( w ){
                $img.alt = type;
                $img.width = 228;
                $img.height = 152;
-               $img.src = Ajaxvars.s3Server + "/flash/assets/item/" +
-                  prize.type.toLowerCase().replace(/([a-z]+)(\d+)(k?)/,
-                     function( string, word, num, k ){
-                        if ("gold" == word) return "gold";
-                        if (k) return word + "50k";
-                        if ("configurablechest" == word)
-                           return chests[string];
-                        return string;
-                     }) + ".jpg";
+               $img.src = getPrizeImageSrc(type);
                $cell.appendChild($img);
                
                $span = document.createElement("span");
@@ -694,10 +797,38 @@ new Module("Fortuna", function( w ){
                      minigame_timestamp: timestamp
                   },
                   function( r ){
-                     var $pre = document.createElement("pre");
-                     $pre.textContent = JSON.parse(r.responseText).
-                        result.item_won.type;
-                     w.update($pre);
+                     var $h4 = document.createElement("h4");
+                     $h4.textContent = "Vous avez gagné\xA0:";
+                     
+                     var $img = document.createElement("img");
+                     var result = JSON.parse(r.responseText).result;
+                     if (!result.success) {
+                        w.error("Échec", result.reason, function( ){
+                           displayMenu();
+                        });
+                        return;
+                     }
+                     var prizeType = result.item_won.type;
+                     $img.alt = prizeType;
+                     $img.src = getPrizeImageSrc(prizeType);
+                     
+                     var $span = document.createElement("span");
+                     $span.textContent = prizeType;
+                     
+                     var $p = document.createElement("p");
+                     $p.id = "fortuna-prize";
+                     $p.appendChild($img);
+                     $p.appendChild($span);
+                     
+                     var $button = document.createElement("a");
+                     ClassName.add($button, "button");
+                     $button.textContent = "Continuer";
+                     $button.addEventListener(
+                        "click", displayMenu, false);
+                     var $okP = document.createElement("p");
+                     $okP.appendChild($button);
+                     
+                     w.update([$h4, $p, $okP]);
                   });
             }, false);
             
@@ -732,30 +863,86 @@ new Module("Fortuna", function( w ){
    }
    
    function displayMenu( ){
-      var $regular = document.createElement("a");
-      ClassName.add($regular, "button");
-      $regular.textContent = "Ticket simple";
-      $regular.setAttribute("data-ticket-type", "regular");
-      $regular.addEventListener("click", requestList, false);
-      
-      var $golden = document.createElement("a");
-      ClassName.add($golden, "button");
-      $golden.textContent = "Salle des coffres";
-      $golden.setAttribute("data-ticket-type", "golden");
-      $golden.addEventListener("click", requestList, false);
-      
-      var $ul = document.createElement("ul");
-      ClassName.add($ul, "button-list");
-      var $regularLi = document.createElement("li");
-      $regularLi.appendChild($regular);
-      $ul.appendChild($regularLi);
-      var $goldenLi = document.createElement("li");
-      $goldenLi.appendChild($golden);
-      $ul.appendChild($goldenLi);
-      
-      w.update($ul);
+      w.wait();
+      retrieveGameData("player", function( playerData, error ){
+         if (error) w.error("Chargement de player.json échoué", error,
+            w.close);
+         
+         var tickets = playerData.tickets;
+         var items = playerData.items;
+         var regular = 1 * items.FortunasTicket + 1 * tickets.fortunas_chance;
+         var golden = 1 * items.FoundersChest + 1 * tickets.gold_club;
+         var retention = playerData.retention;
+         var contents = [];
+         var $button;
+         var s;
+         
+         var $h4 = document.createElement("h4");
+         $h4.textContent = "C’est pourri, c’est gratuit";
+         contents.push($h4);
+         
+         var $p = document.createElement("p");
+         $p.textContent = "Jour " + retention.length + " sur 7"
+         contents.push($p);
+         
+         var $ul = document.createElement("ul");
+         $ul.id = "fortuna-days";
+         var $li;
+         var $previous;
+         var isCounting = false;
+         var hasPlayedThisDay = false;
+         for (var i = 8; --i;) {
+            $li = document.createElement("li");
+            $li.textContent = i;
+            hasPlayedThisDay = retention.indexOf(i) >= 0;
+            isCounting = isCounting || hasPlayedThisDay;
+            ClassName.add($li, hasPlayedThisDay ?
+               "fortuna-played-day" : isCounting ?
+                  "fortuna-missed-day" : "");
+            if ($previous) $ul.insertBefore($li, $previous);
+            else $ul.appendChild($li);
+            $previous = $li;
+         }
+         contents.push($ul);
+         
+         if (regular || golden) {
+            $ul = document.createElement("ul");
+            ClassName.add($ul, "button-list");
+            contents.push($ul);
+         } else {
+            $p = document.createElement("p");
+            $p.textContent = "Plus rien, attendez demain…";
+            contents.push($p);
+         }
+         
+         if (regular) {
+            $button = document.createElement("a");
+            ClassName.add($button, "button");
+            s = regular > 1 ? "s" : "";
+            $button.textContent =
+               regular + " ticket" + s + " simple" + s;
+            $button.setAttribute("data-ticket-type", "regular");
+            $button.addEventListener("click", requestList, false);
+            $li = document.createElement("li");
+            $li.appendChild($button);
+            $ul.appendChild($li);
+         }
+         
+         if (golden) {
+            var $button = document.createElement("a");
+            ClassName.add($button, "button");
+            s = golden > 1 ? "s" : "";
+            $button.textContent = golden + " médaillon" + s;
+            $button.setAttribute("data-ticket-type", "golden");
+            $button.addEventListener("click", requestList, false);
+            $li = document.createElement("li");
+            $li.appendChild($button);
+            $ul.appendChild($li);
+         }
+            
+         w.update(contents);
+      });
    }
-   
    displayMenu();
 });
 
@@ -770,19 +957,19 @@ var GameDataUrls = {
 var retrieveGameData = (function( ){
    var _cache = {};
    
-   return function( key, callback ){
+   return function retrieveGameData( key, callback ){
       if (key in _cache) {
          callback(_cache[key]);
       } else {
-         ajaxGet(GameDataUrls[key].replace(/\{([^\}])+\}/g,
+         ajaxGet(GameDataUrls[key].replace(/\{([^\}]+)\}/g,
             function( _, varName ){
                return Ajaxvars[varName];
             }),
          {}, function( r ){
             try {
-               var result = JSON.parse(r.responseText).result;
-               _cache[key] = result;
-               callback(result);
+               var json = JSON.parse(r.responseText);
+               _cache[key] = json;
+               callback(json);
             } catch (e) {
                callback(null, e);
             }
@@ -790,9 +977,8 @@ var retrieveGameData = (function( ){
       }
    };
 }());
-expose(retrieveGameData, "retrieveGameData");
 
-// [@ACT] Actions au chargement de la page /////////////////////////////
+// [@INI] Initialisation du script /////////////////////////////////////
 
 // initialise l'objet flash, oui, celui qui ne devrait plus exister...
 // n'appeler cette fonction qu'après qu'Ajaxvars ait été peuplé
@@ -852,127 +1038,201 @@ function initSwf( $swf ){
       "subnetwork",
       "user_hash",
    ].forEach(function( name ){
-         var value = Ajaxvars[name.replace(/_(\w)/gi,
-            function( s, s1 ){ return s1.toUpperCase(); })];
-         $flashvars.value += name + "=" + value + "&";
-      });
-      var v = $flashvars.value;
-      $flashvars.value = v.substr(0, v.length - 1);
-      $swf.data = Ajaxvars.s3Server + Ajaxvars.s3SwfPrefix +
-         "/preloader.swf?cachebreaker=" + Ajaxvars.preloaderCachebreaker;
+      var value = Ajaxvars[name.replace(/_(\w)/gi,
+         function( s, s1 ){ return s1.toUpperCase(); })];
+      $flashvars.value += name + "=" + value + "&";
+   });
+   var v = $flashvars.value;
+   $flashvars.value = v.substr(0, v.length - 1);
+   $swf.data = Ajaxvars.s3Server + Ajaxvars.s3SwfPrefix +
+      "/preloader.swf?cachebreaker=" + Ajaxvars.preloaderCachebreaker;
 }
 
-function cleanupPage( ){
-   var $html = document.documentElement;
-   var $body = document.body;
+function injectStyle( style ){
+   var $receiver = document.querySelector("head") ||
+      document.documentElement;
+   var $style = document.createElement("style");
+   $style.type = "text/css";
+   $style.textContent = style;
+   $receiver.appendChild($style);
+}
+
+switch (location.hostname.match(/(\w+)\.\w+$/)[1]) {
+
+case "kabam": ///////////////////////////////////////////////////////
    
-   // prévient un certain nombre de requêtes inutiles
-   unsafeWindow.V6.go = function( ){};
+   /* prévention des scripts : Firefox seulement.
+      Ce n'est pas vital mais ça économise pas mal de traitement
+      et de trafic réseau inutile. */
+   document.addEventListener("beforescriptexecute", function( e ){
+      e.preventDefault();
+   });
+
+   document.addEventListener("DOMContentLoaded", function( ){
+      var $body = document.body;
+      var $html = document.documentElement;
+      var $form = document.getElementById("post_form");
+      
+      // sauvegarde des noeuds DOM
+      var $saver = document.createElement("div");
+      $saver.appendChild($form);
+      
+      // nettoyage du HTML
+      Array.prototype.forEach.call(
+         $html.querySelectorAll("script, style,\
+            link[rel='stylesheet']"),
+         function( $ ){ $.parentNode.removeChild($); }
+      );
+      Attribute.removeAll($html, "lang", "dir");
+      $body.innerHTML = "";
+      Attribute.remove($body, "id", "class");
+      
+      // repeuplement du DOM
+      injectStyle("html, body, iframe {\
+         display: block;\
+         width: 100%;\
+         height: 100%;\
+         margin: 0;\
+         border: none;\
+      }");
+      
+      $body.appendChild($form);
+      
+      var $iframe = document.createElement("iframe");
+      $iframe.name = "game_frame";
+      $iframe.src = "#";
+      $iframe.width = window.innerWidth;
+      $iframe.height = window.innerHeight;
+      $body.appendChild($iframe);
+      
+      // lancement du jeu
+      $form.submit();
+      
+   });
+   break;
+
+case "wonderhill": //////////////////////////////////////////////////
    
-   // nettoie le html
-   $html.removeAttribute("xmlns:fb");
-   $html.lang = "fr-FR";
-   $html.setAttribute("xml:lang", "fr-FR");
    
-   $body.innerHTML = "";
-   $body.removeAttribute("class");
-   $body.removeAttribute("onload");
-   $body.removeAttribute("onresize");
-   $body.removeAttribute("style");
-   var $$unwantedTags = document.querySelectorAll(
-      "style, link[type='text/css'], script");
-   for (var i = 0, $tag; $tag = $$unwantedTags[i++];) {
-      $tag.parentNode.removeChild($tag);
+   debug("body loaded?", document.body);
+   
+   if (FIREFOX) {
+      // annule les scripts et récupère les valeurs de C.attrs.
+      document.addEventListener("beforescriptexecute", function( e ){
+         e.preventDefault();
+         var regexp = /^\s*C\.attrs\.(\w+)\s+= ([^;$]+)/gm;
+         var text = e.target.textContent;
+         var match;
+         while (match = regexp.exec(text)) {
+            // le bloc try/catch prévient une erreur à cause des
+            // labels incorrects dans googlePaymentTokens
+            try { Ajaxvars[match[1]] = eval(match[2]); } catch (_) {}
+         }
+      }, false);
    }
    
-   /* redéfinit la fonction platforms_kabam_game_show, qui est lancée
-   juste après que les variables de C.attrs aient été initialisées.
-   Ceci permet de récupérer ces variables et de prévenir du même coup le
-   chargement du Flash. */
-   var C = unsafeWindow.C;
-   C.views.platforms_kabam_game_show = function( ){
-      var Cattrs = C.attrs;
-      for (var attr in Cattrs)
-         Ajaxvars[attr] = Cattrs[attr];
-      expose(Ajaxvars, "Ajaxvars");
-   };
-}
-
-// insère le nouveau contenu
-function insertNewContent( ){
-   GM_addStyle(GM_getResourceText("style"));
-
-   var $html = document.documentElement;
-   var $body = document.body;
-   
-   document.title = "HybriDoA";
-   $body.innerHTML = GM_getResourceText("html");
-   var $controls = document.getElementById("controls");
-   var $swf = document.getElementById("swf");
-   
-   // boutons de contrôle du flash
-   var $startButton = document.getElementById("start-button");
-   var flashLoaded = false;
-   $startButton.addEventListener("click", function( event ){
-      event.preventDefault();
-      this.textContent = "…";
-      var that = this;
-      setTimeout(function( ){
-         that.textContent = "Restart";
-      }, 2000);
+   document.addEventListener("DOMContentLoaded", function( ){
+      var $html = document.documentElement;
+      var $body = document.body;
       
-      if (!flashLoaded) {
-         initSwf($swf);
-         $body.insertBefore($swf, $body.firstChild);
+      if (!FIREFOX) {
+         /* Les scripts n'ont pas été annulés, il va falloir faire un 
+         peu de travail dessus… */
          
-         var previousResize = 0;
-         var timer = -1;
-         var $html = document.documentElement;
-         function resize( ){
-            clearTimeout(timer);
-            var now = new Date() * 1;
-            if (now - previousResize >= 1000) {
-               var controlsStyle = getComputedStyle($controls, null);
-               var controlsHeight = parseInt(controlsStyle.height) +
-                  parseInt(controlsStyle.borderTopWidth);
-               $swf.width = $html.clientWidth;
-               $swf.height = $html.clientHeight - controlsHeight;
-            } else {
-               timer = setTimeout(resize, 1000);
+         unsafeWindow.V6.go = function( ){};
+         
+         /* redéfinit la fonction platforms_kabam_game_show, qui est
+         appelée juste après que les variables de C.attrs aient été
+         initialisées. Ceci permet de récupérer ces variables et de
+         prévenir du même coup le chargement du Flash. */
+         var C = unsafeWindow.C;
+         C.views.platforms_kabam_game_show = function( ){
+            var Cattrs = C.attrs;
+            for (var attr in Cattrs)
+               Ajaxvars[attr] = Cattrs[attr];
+         };
+      }
+      
+      // nettoie le html
+      Attribute.remove($html, "xmlns:fb");
+      $html.lang = "fr";                        // i18n
+      $html.setAttribute("xml:lang", "fr-FR");  // i18n
+      $body.innerHTML = "";
+      debug($body);
+      Attribute.removeAll($body);
+      debug($body);
+      Array.prototype.forEach.call(document.querySelectorAll(
+         "style, link[type='text/css'], script"),
+         function( $ ){ $.parentNode.removeChild($); });
+      
+      // insère le nouveau contenu
+      injectStyle(GM_getResourceText("style"));
+
+      var $html = document.documentElement;
+      var $body = document.body;
+      
+      document.title = "HybriDoA";
+      $body.innerHTML = GM_getResourceText("html");
+      var $controls = document.getElementById("controls");
+      var $swf = document.getElementById("swf");
+      
+      // boutons de contrôle du flash
+      var $startButton = document.getElementById("start-button");
+      var flashLoaded = false;
+      $startButton.addEventListener("click", function( event ){
+         event.preventDefault();
+         this.textContent = "…";
+         var that = this;
+         setTimeout(function( ){
+            that.textContent = "Restart";
+         }, 2000);
+         
+         if (!flashLoaded) {
+            initSwf($swf);
+            $body.insertBefore($swf, $body.firstChild);
+            
+            var previousResize = 0;
+            var timer = -1;
+            var $html = document.documentElement;
+            var resize = function resize( ){
+               clearTimeout(timer);
+               var now = new Date() * 1;
+               if (now - previousResize >= 1000) {
+                  var controlsStyle = getComputedStyle($controls, null);
+                  var controlsHeight = parseInt(controlsStyle.height) +
+                     parseInt(controlsStyle.borderTopWidth);
+                  $swf.width = $html.clientWidth;
+                  $swf.height = $html.clientHeight - controlsHeight;
+               } else {
+                  timer = setTimeout(resize, 1000);
+               }
+               previousResize = now;
             }
-            previousResize = now;
+            window.addEventListener("resize", resize);
+            resize();
+            
+            flashLoaded = true;
+         } else {
+            var $parent = $swf.parentNode;
+            if ($parent) $parent.removeChild($swf);
+            setTimeout(function( ){
+               $body.insertBefore($swf, $body.firstChild);
+            }, 700);
          }
-         window.addEventListener("resize", resize);
-         resize();
-         
-         flashLoaded = true;
-      } else {
+      });
+      
+      var $stopButton = document.getElementById("stop-button");
+      $stopButton.addEventListener("click", function( event ){
+         event.preventDefault();
          var $parent = $swf.parentNode;
          if ($parent) $parent.removeChild($swf);
-         setTimeout(function( ){
-            $body.insertBefore($swf, $body.firstChild);
-         }, 700);
-      }
-   });
+      });
+      
+      Module.initAll();
+   }, false);
    
-   var $stopButton = document.getElementById("stop-button");
-   $stopButton.addEventListener("click", function( event ){
-      event.preventDefault();
-      var $parent = $swf.parentNode;
-      if ($parent) $parent.removeChild($swf);
-   });
+   break;
    
-   Module.initAll();
-}
-
-// charge le jeu en grand quand lancé depuis Kabam.com
-if (location.hostname.indexOf("www.kabam.com") >= 0) {
-   var $f = document.querySelector("form[target]");
-   $f.target = "";
-   $f.submit();
-} else { // sinon, on est sur wonderhill.com
-   cleanupPage();
-   insertNewContent();
 }
 
 // [@AJX] Primitives ajax //////////////////////////////////////////////
@@ -983,11 +1243,34 @@ const LEVIATHON = "Bevar-Asp";
 const DRACO = "Draoumculiasis";
 
 var Ajaxvars = {};
+expose(Ajaxvars, "Ajaxvars");
 var staticParams;
+
+function _ajax( request ){
+   var broker = new XMLHttpRequest();
+   broker.onreadystatechange = function( ){
+      console.info(this.readyState, this.status);
+      if (XMLHttpRequest.DONE == this.readyState) {
+         if (200 == this.status) request.onload(this);
+      }
+   };
+   var method = request.method.toUpperCase();
+   broker.open(method, request.url);
+   if ("POST" == method) {
+      broker.setRequestHeader("content-type",
+         "application/x-www-form-url-encoded");
+   }
+   if (request.headers) {
+      for (var [header, value] in Iterator(request.headers)) {
+         broker.setRequestHeader(header, value);
+      }
+   }
+   broker.send("POST" == method ? request.data : null);
+};
 
 function getTimestamp( ){
    return new String(new Date() / 1000 | 0);
-}
+};
 
 function getMandatoryParams( ){
    if (!staticParams) {
@@ -998,6 +1281,11 @@ function getMandatoryParams( ){
          "&timestamp=";
    }
    return staticParams + getTimestamp();
+};
+expose(getMandatoryParams, "getMandatoryParams");
+
+function ajaxError( ajax ){
+   console.error(ajax.status, ajax.statusText, ajax.responseText);
 }
 
 function ajaxGet( url, params, callback, options ){
@@ -1009,7 +1297,7 @@ function ajaxGet( url, params, callback, options ){
    var request = {
       method: "get",
       url: url + data,
-      onerror: debug,
+      onerror: ajaxError,
       onload: callback
    };
    if (options) {
@@ -1018,7 +1306,7 @@ function ajaxGet( url, params, callback, options ){
       };
    }
    GM_xmlhttpRequest(request);
-}
+};
 
 function ajaxPost( url, params, callback, isSigned ){
    if (undefined === isSigned) isSigned = true;
@@ -1044,10 +1332,10 @@ function ajaxPost( url, params, callback, isSigned ){
       url: url,
       data: data,
       onload: callback,
-      onerror: debug,
+      onerror: ajaxError,
       headers: headers
    });
-}
+};
 
 // [@SHA] Implémentation JavaScript du SHA-1 ///////////////////////////
 
@@ -1167,5 +1455,3 @@ var SHA1 = (function( ){
    
    return SHA1;
 }());
-expose(SHA1, "SHA1");
-} // if (top === window)

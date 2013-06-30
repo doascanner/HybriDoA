@@ -72,6 +72,15 @@ a.button.lit {
       rgba(10, 25, 45, 0.33) 50%);
    font-weight: bold;
 }
+a.button.disabled {
+   color: #555;
+   border-color: #222;
+   cursor: default;
+}
+a.button.disabled:hover {
+   box-shadow:  none;
+   text-shadow:  none;
+}
 
 /************** boutons « Start » et « Stop » *************************/
 
@@ -149,6 +158,7 @@ section.window {
    padding: 1.2em 0 1ex;
    background: rgba(11, 11, 11, 0.9);
    color: #eee;
+   text-align: center;
    border: solid thin #282828;
    border-radius: 3px;
    box-shadow: 0 1px 2px 0 black;
@@ -217,10 +227,6 @@ section.window pre {
 section.window a.button {
    display: inline-block;
 }
-section.window p:last-child {
-   margin: 1em;
-   text-align: center;
-}
 
 /*********************** spinner **************************************/
 
@@ -278,7 +284,7 @@ div.spinner-right {
 
 section.error {
    display: none;
-   padding: 1ex 1ex 0;
+   padding: 1.5em 2em 0;
    text-align: center;
 }
 section.error h4 { text-shadow: 0 0 3px red; }
@@ -329,6 +335,27 @@ tr.selected-realm:hover {
 
 /****************** module « Fortuna » ********************************/
 
+#fortuna-days {
+   display: block;
+   padding: 0;
+   text-align: center;
+}
+#fortuna-days li {
+   display: inline-block;
+   width: 2em;
+   line-height: 2em;
+   margin: 0 0.25ex;
+   border-radius: 2px;
+   border: solid thin #333;
+}
+#fortuna-days li.fortuna-played-day {
+   background: linear-gradient(162deg, #27e, #033);
+   border-color: #157;
+}
+#fortuna-days li.fortuna-missed-day {
+   background: linear-gradient(162deg, #d23, #601);
+   border-color: #811;
+}
 #fortuna-table {
    border-collapse: separate;
    border-spacing: 0.4em;
@@ -341,11 +368,13 @@ tr.selected-realm:hover {
    padding: 0;
    vertical-align: top;
 }
-#fortuna-table img {
+#fortuna-table img,
+#fortuna-prize img {
    width: 150px;
    height: 100px;
 }
-#fortuna-table span {
+#fortuna-table span,
+#fortuna-prize span {
    font-size: smaller;
    display: block;
    width: 150px;
@@ -359,6 +388,7 @@ tr.selected-realm:hover {
    text-align: left;
    text-indent: 0.5ex;
 }
+
 /************************ divers **************************************/
 
 .limited-height {
