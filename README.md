@@ -1,9 +1,9 @@
 HybriDoA
 ========
 
-HybriDoA est un userscript pour le jeu web Dragons of Atlantis (DoA).
-Les userscripts sont des scripts permettant de personnaliser les pages
-Web que l'on visite. Ils s'utilisent sous Firefox avec l'extension
+HybriDoA est un *script utilisateur* (userscript) pour le jeu Dragons of Atlantis (DoA) sur Kabam.com.
+Les userscripts sont de petits scripts permettant de modifier à sa convenance les pages
+Web que l'on visite. On peut les utiliser par exemple sous Firefox grâce à l'extension
 [Greasemonkey](https://addons.mozilla.org/fr/firefox/addon/greasemonkey/).
 
 DoA est un jeu web en réseau dont la partie client est faite en Flash.
@@ -13,12 +13,31 @@ du même coup la dépendance au plugin Flash Player.
 
 Le projet est en tout début de développement. L'interface HTML
 comportera des boutons pour lancer l'application originale en Flash
-jusqu'à ce que suffisamment de fonctions aient été implémentées.
+jusqu'à ce que suffisamment de fonctions aient été mises en œuvre.
 
 Actuellement réalisé :
 
 - Changement de royaume
 - Chance de Fortuna / Salle des coffres
+
+
+Guide d'installation
+--------------------
+
+Actuellement, HybriDoA fonctionne seulement avec Greasemonkey, extension de Firefox.
+Pour l'installer, c'est très simple&nbsp;! Suivez ces quelques étapes&nbsp;:
+
+1. Assurez-vous de posséder [la dernière version de Firefox](https://www.mozilla.org/fr/firefox/fx/).
+2. Installez l'extension [Greasemonkey](https://addons.mozilla.org/fr/firefox/addon/greasemonkey/).
+3. Si Firefox vous demande de redémarrer, acceptez.
+4. Suivez le lien [HybriDoA.user.js](https://github.com/Watilin/HybriDoA/raw/master/HybriDoA.user.js).
+    Greasemonkey détecte alors le script et vous propose de l'installer&nbsp;: acceptez.
+5. C'est tout&nbsp;! Vous pouvez jouer immédiatement sur Kabam, le script agit automatiquement.
+
+
+À tout moment, vous pouvez désactiver ou supprimer HybriDoA s'il ne vous plaît plus, en vous rendant sur la page
+des modules complémentaires de Firefox (Contrôle-majuscule-A), sous l'onglet de gestion des userscripts.
+
 
 Contribuez !
 ------------
@@ -36,7 +55,7 @@ Voici quelques conseils si vous voulez contribuer au projet.
       principal devient trop gros. Ils seront concaténés avec un script
       shell.
 
-- Le script tourne en mode strict. Plus d'infos :
+- Le script tourne en *mode strict*. Plus d'infos :
    * [sur la doc du MSDN (fr)](http://msdn.microsoft.com/fr-fr/library/ie/br230269%28v=vs.94%29.aspx)
    * [sur le blog de John Resig (en)](http://ejohn.org/blog/ecmascript-5-strict-mode-json-and-more/)
 
