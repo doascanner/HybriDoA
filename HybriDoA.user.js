@@ -10,12 +10,14 @@
 // @exclude       *&gm=no*
 // 
 // @icon          hybridoa.png
-// @resource      html     hybridoa.html
-// @resource      style    hybridoa.css
+// @resource      html        hybridoa.html
+// @resource      style       hybridoa.css
+// @resource      terrains    terrains-sprite.png
 //
 // @run-at        document-start
 // @grant         GM_xmlhttpRequest
 // @grant         GM_getResourceText
+// @grant         GM_getResourceURL
 // 
 // @homepage      https://github.com/Watilin/HybriDoA#hybridoa
 // @author        Watilin
@@ -38,7 +40,7 @@ up my work or get inspired by it.
 */
 
 /* Marqueurs :
-   todo, xxx, debug, here, i18n
+   todo, xxx, here, i18n, temp
 */
 
 /* TODO
@@ -94,6 +96,9 @@ pour la section [XYZ], tapez « @XYZ ».
 
 var ua = navigator.userAgent;
 const FIREFOX = ua.search(/firefox/i) >= 0;
+
+// passer à false quand on aura pu se débarasser de GM_xmlhttpRequest
+const USE_GM_XHR = true;
 
 // [@DBG] Utilitaires de débogage //////////////////////////////////////
 
@@ -153,6 +158,14 @@ var expose = (function( ){
 }());
 
 // [@UTI] Divers utilitaires ///////////////////////////////////////////
+
+// Extension d'objet
+Object.extend = function extend( subject, properties ){
+   subject = subject || {};
+   for (var p in properties)
+      subject[p] = properties[p];
+   return subject;
+};
 
 // Donne une description approximative de la durée écoulée entre la date
 // donnée et maintenant, en omettant les unités trop petites
@@ -274,11 +287,17 @@ function Window( title, $control ){
       that.center();
    }, false);
    
+   this.$window.addEventListener("transitionend", function( event ){
+      if (event.propertyName == "opacity") {
+         if ("0" == this.style.opacity) {
+            this.style.display = "none";
+            that.isOpened = false;
+         }
+      }
+   });
+   
    this.$control = $control;
 }
-
-// constante à garder synchronisée avec le CSS
-Window.OPACITY_TRANSITION = 100; // en millisecondes
 
 Window.prototype = {
    
@@ -291,16 +310,13 @@ Window.prototype = {
    isOpened: false,
    
    open: function open( ){
+      if (this.$control) ClassName.add(this.$control, "lit");
       var style = this.$window.style;
       style.display = "block";
       style.opacity = "0";
-      var that = this;
-      setTimeout(function( ){
-         style.opacity = "1";
-         if (that.$control) ClassName.add(that.$control, "lit");
-         that.isOpened = true;
-         setTimeout(function( ){ that.center(); }, 0);
-      }, 0);
+      setTimeout(function( ){ style.opacity = "1"; }, 0);
+      this.isOpened = true;
+      this.center();
    },
    
    center: function( ){
@@ -314,20 +330,18 @@ Window.prototype = {
          var windowH = window.innerHeight;
          var extraW = (windowH > $body.offsetHeight) ?
             Scrollbars.width : 0;
-         var extraH = (windowW > $body.offsetWidth) ? Scrollbars.height : 0;
+         var extraH = (windowW > $body.offsetWidth) ?
+            Scrollbars.height : 0;
+         
          style.left = (windowW - extraW - computedW) / 2 + "px";
-         style.top = (windowH - extraH - computedH) / 2 + "px";
+         style.top = (windowH - extraH - computedH) / 2  +"px";
       }
    },
    
    close: function close( ){
       if (this.$control) ClassName.remove(this.$control, "lit");
-      this.isOpened = false;
-      var style = this.$window.style;
-      style.opacity = "0";
-      setTimeout(function( ){
-         style.display = "none";
-      }, 300);
+      this.$window.style.opacity = "0";
+      // the rest is achieved by the "transitionend" listener
    },
    
    /** Vide la fenêtre puis insère le contenu donné
@@ -545,209 +559,316 @@ new Module("Royaume", function( w ){
    var selectedLocale = "fr";
    
    function refreshRealms( ){
-      ajaxGet("/platforms/kabam/lightboxes/change_realm", {
-         signed_request: Ajaxvars.signedRequest,
-         i18n_locale: selectedLocale
-      }, function( r ){
-         var contents = [];
-         
-         var $select = document.createElement("select");
-         var $option;
-         for (var loc in locales) {
-            $option = document.createElement("option");
-            $option.value = loc;
-            $option.textContent = locales[loc];
-            if (loc == selectedLocale) $option.selected = true;
-            $select.appendChild($option);
-         }
-         
-         var $label = document.createElement("label");
-         $label.textContent = "Langue\xa0: ";
-         $label.appendChild($select);
-         var $p = document.createElement("p");
-         $p.appendChild($label);
-         var $ok = document.createElement("a");
-         ClassName.add($ok, "button small");
-         $ok.textContent = "Ok";
-         $ok.title = "Valider le changement de la langue"
-         $ok.addEventListener("click", function( ){
-            var loc = $select.options[$select.selectedIndex].value;
-            ajaxPost(location.href, {
-               i18n_locale: loc
-            }, function( r ){
-               selectedLocale = loc;
-               w.wait();
-               refreshRealms();
-            });
-         }, false);
-         $p.appendChild(document.createTextNode(" "));
-         $p.appendChild($ok);
-         contents.push($p);
-         
-         var $div = document.createElement("div");
-         $div.innerHTML = r.responseText;
-         var rawText = $div.textContent;
-         
-         var $table = document.createElement("table");
-         var $headRow = $table.createTHead().insertRow(-1);
-         var $tbody = document.createElement("tbody");
-         $table.appendChild($tbody);
-         
-         var regexp = /^\S.*$/gm;
-         var match;
-         var $th;
-         var $row;
-         var $td;
-         var realmId;
-         var currentRealmId;
-         var selectedRealmId;
-         var $selectedRealm;
-         
-         for (var i = -2; match = regexp.exec(rawText); i++) {
-            if (i < 0) continue;
-            if (i < 5) {
-               $th = document.createElement("th");
-               $th.textContent = match[0];
-               $headRow.appendChild($th);
-            } else {
-               if (!(i % 5)) {
-                  realmId = parseInt(match[0], 10);
-                  if (!realmId) break;
-                  $row = $tbody.insertRow(-1);
-                  if (realmId ==
-                        location.hostname.match(/realm(\d+)/)[1]) {
-                     ClassName.add($row, "selected-realm");
-                     $selectedRealm = $row;
-                     currentRealmId = realmId;
-                  }
-               }
-               $td = $row.insertCell(-1);
-               $td.textContent = match[0];
+      Ajax.get({
+         url: Ajax.vars.serverUrl +
+            "/platforms/kabam/lightboxes/change_realm",
+         parameters: {
+            signed_request: Ajax.vars.signedRequest,
+            i18n_locale: selectedLocale
+         },
+         onload: function( response ){
+            var contents = [];
+            
+            var $select = document.createElement("select");
+            var $option;
+            for (var loc in locales) {
+               $option = document.createElement("option");
+               $option.value = loc;
+               $option.textContent = locales[loc];
+               if (loc == selectedLocale) $option.selected = true;
+               $select.appendChild($option);
             }
-         }
-         
-         $table.addEventListener("click", function( event ){
-            var $target = event.target;
-            if ("td" != $target.tagName.toLowerCase()) return;
-            if ($selectedRealm)
-               ClassName.remove($selectedRealm, "selected-realm");
-            var $tr = $target.parentNode;
-            ClassName.add($tr, "selected-realm");
-            $selectedRealm = $tr;
-            selectedRealmId = $tr.firstChild.textContent * 1;
-            ClassName[selectedRealmId == currentRealmId ?
-               "add" : "remove"]($ok, "disabled");
-         }, false);
-         
-         var $box = document.createElement("div");
-         ClassName.add($box, "limited-height");
-         $box.appendChild($table);
-         contents.push($box);
-         
-         var $ok = document.createElement("a");
-         ClassName.add($ok, "button disabled");
-         $ok.textContent = "Ok";
-         $ok.title = "Valider le changement de royaume"
-         
-         $ok.addEventListener("click", function( ){
-            if (ClassName.has(this, "disabled")) return;
-            w.wait();
-            var realmId = $selectedRealm.firstChild.textContent;
-            ajaxPost(Ajaxvars.serverUrl +
-               "/platforms/kabam/change_realm/" + realmId,
-               {}, function( response ){
-                  var json = JSON.parse(response.responseText);
-                  if (!json.realmwiseurl) {
-                     debug(json);
+            
+            var $label = document.createElement("label");
+            $label.textContent = "Langue\xa0: ";
+            $label.appendChild($select);
+            var $p = document.createElement("p");
+            $p.appendChild($label);
+            var $ok = document.createElement("a");
+            ClassName.add($ok, "button small");
+            $ok.textContent = "Ok";
+            $ok.title = "Valider le changement de la langue"
+            $ok.addEventListener("click", function( ){
+               var loc = $select.options[$select.selectedIndex].value;
+               Ajax.signedPost({
+                  url: location.href,
+                  parameters: { i18n_locale: loc },
+                  onload: function( ){
+                     selectedLocale = loc;
+                     w.wait();
+                     refreshRealms();
+                  },
+                  onerror: function( message ){
                      w.error("Erreur",
-                        "Impossible d’obtenir l'adresse du royaume",
-                        w.close);
-                     return;
+                        message + " / Ce n’est probablement qu’une " +
+                           "défaillance passagère du réseau, " + 
+                           "veuillez réesayer.",
+                        function( ){ w.close(); });
                   }
-                  ajaxPost(json.realmwiseurl, {},
-                     function( wiseResponse ){
-                        var wiseJson =
-                           JSON.parse(wiseResponse.responseText);
-                        debug(wiseJson);
-                        if (wiseJson.success) {
-                           top.location.href = Ajaxvars.appPath;
-                        } else {
-                           debug(wiseJson);
-                           w.error("Erreur",
-                              "Impossible de joindre le nouveau royaume",
-                              w.close);
+               });
+            }, false);
+            $p.appendChild(document.createTextNode(" "));
+            $p.appendChild($ok);
+            contents.push($p);
+            
+            var $div = document.createElement("div");
+            $div.innerHTML = response.response;
+            var rawText = $div.textContent;
+            
+            var $table = document.createElement("table");
+            var $headRow = $table.createTHead().insertRow(-1);
+            var $tbody = document.createElement("tbody");
+            $table.appendChild($tbody);
+            
+            var regexp = /^\S.*$/gm;
+            var match;
+            var $th;
+            var $row;
+            var $td;
+            var realmId;
+            var currentRealmId;
+            var selectedRealmId;
+            var $selectedRealm;
+            
+            for (var i = -2; match = regexp.exec(rawText); i++) {
+               if (i < 0) continue;
+               if (i < 5) {
+                  $th = document.createElement("th");
+                  $th.textContent = match[0];
+                  $headRow.appendChild($th);
+               } else {
+                  if (!(i % 5)) {
+                     realmId = parseInt(match[0], 10);
+                     if (!realmId) break;
+                     $row = $tbody.insertRow(-1);
+                     if (realmId ==
+                           location.hostname.match(/realm(\d+)/)[1]) {
+                        ClassName.add($row, "selected-realm");
+                        $selectedRealm = $row;
+                        currentRealmId = realmId;
+                     }
+                  }
+                  $td = $row.insertCell(-1);
+                  $td.textContent = match[0];
+               }
+            }
+            
+            if (i <= 5) {
+               w.error("Désolé",
+                  "Je n’ai pas pu récupérer la liste des royaumes…",
+                  function( ){ w.close(); });
+               return;
+            }
+            
+            $table.addEventListener("click", function( event ){
+               var $target = event.target;
+               if ("td" != $target.tagName.toLowerCase()) return;
+               if ($selectedRealm)
+                  ClassName.remove($selectedRealm, "selected-realm");
+               var $tr = $target.parentNode;
+               ClassName.add($tr, "selected-realm");
+               $selectedRealm = $tr;
+               selectedRealmId = $tr.firstChild.textContent * 1;
+               ClassName[selectedRealmId == currentRealmId ?
+                  "add" : "remove"]($ok, "disabled");
+            }, false);
+            
+            $div = document.createElement("div");
+            ClassName.add($div, "limited-height");
+            $div.appendChild($table);
+            contents.push($div);
+            
+            var $ok = document.createElement("a");
+            ClassName.add($ok, "button disabled");
+            $ok.textContent = "Ok";
+            $ok.title = "Valider le changement de royaume"
+            
+            $ok.addEventListener("click", function( ){
+               if (ClassName.has(this, "disabled")) return;
+               w.wait();
+               var realmId = $selectedRealm.firstChild.textContent;
+               Ajax.signedPost({
+                  url: Ajax.vars.serverUrl +
+                     "/platforms/kabam/change_realm/" + realmId,
+                  responseType: "json",
+                  onerror: function( message ){
+                     w.error("Erreur", message, function( ){
+                        w.close();
+                     });
+                  },
+                  onload: function( response ){
+                     var wiseUrl = response.response.realmwiseurl;
+                     if (!wiseUrl) {
+                        w.error("Erreur",
+                           "Je n’ai pas obtenu l’adresse du royaume",
+                           function( ){ w.close(); });
+                        return;
+                     }
+                     Ajax.signedPost({
+                        url: wiseUrl,
+                        responseType: "json",
+                        onload: function( wiseResponse ){
+                           if (wiseResponse.response.success) {
+                              top.location.href = Ajax.vars.appPath;
+                           } else {
+                              w.error("Erreur",
+                                 "Je ne peux pas joindre le nouveau " + 
+                                    "royaume",
+                                 function( ){ w.close(); });
+                           }
                         }
                      });
+                  }
                });
-         }, false);
-         
-         var $okP = document.createElement("p");
-         $okP.appendChild($ok);
-         contents.push($okP);
-         
-         w.update(contents);
+            }, false);
+            
+            $p = document.createElement("p");
+            $p.appendChild($ok);
+            contents.push($p);
+            
+            w.update(contents);
+         }
       });
    }
    refreshRealms();
 });
 
 new Module("Fortuna", function( w ){
-   var chests = {};
-   retrieveGameData("chests", function( chestData, error ){
-      if (error) w.error("Chargement de chests.json échoué", error,
-         w.close);
-      for (var chestIndex in chestData) {
-         chests[chestIndex.toLowerCase()] =
-            chestData[chestIndex].replace(/\.jpg$/g, "");
-      }
-      // (TODO) refreshChestImages();
-   });
    
-   function getPrizeImageSrc( prizeType ){
+   var _prizeInfoCache = {};
+   
+   function setupPrizeInfo( prize, $img, $span ){
+   
+      // handle prize texts
+      // I added a cache layer because the xml is huge
+      if (prize in _prizeInfoCache) {
+         var info = _prizeInfoCache[prize];
+         $img.alt = info.name;
+         $span.textContent = info.name;
+         if (info.description) {
+            $img.longdesc = info.description;
+            $img.title = info.description;
+         }
+      } else {
+         $img.alt = prize;
+         $span.textContent = prize;
+         
+         GameData.retrieve("langFr", function( data, error ){
+            if (error) {
+               w.error("Erreur pas trop grave",
+                  "Je n'ai pas pu charger le fichier de langue, " +
+                  "les objets seront affichés avec leurs codes.\n" +
+                  "(raison\xA0:\n" + error + ")");
+               return;
+            }
+            
+            var regexp = new RegExp("<(" + prize.toLowerCase() + ")>\\s*" +
+               "(?:<name>([\\x20-\\x7E\\s]*?)</name>\\s*)?" +
+               "(?:<description>([\\x20-\\x7E\\s]*?)</description>\\s*)?" +
+               "(?:<name>([\\x20-\\x7E\\s]*?)</name>\\s*)?" +
+               "</\\1>");
+            var match = data.match(regexp);
+            var decoded = match && match.map(function( m ) m ?
+               m.replace(/&#(\d+);/g, function( _, d )
+                  eval("'\\x" + parseInt(d).toString(16) + "'")) :
+               "");
+            
+            if (decoded) {
+               var name = decoded[2] || decoded[4];
+               var description = decoded[3] || "";
+            } else {
+               debug(prize);
+               _prizeInfoCache[prize] = {
+                  name       : prize,
+                  description: ""
+               };
+               return;
+            }
+            
+            $img.alt = name;
+            $span.textContent = name;
+            $img.longdesc = description;
+            $img.title = description;
+            $span.title = description;
+            
+            _prizeInfoCache[prize] = {
+               name       : name,
+               description: description
+            };
+         });
+      }
+      
+      // handle images
       var isResource = false;
       var isTroop = false;
       var isChest = false;
       var isGold = false;
-      var chunks = prizeType.match(/\d+|[A-Z][a-z]*|[a-z]+/g);
+      var isEgg = false;
+      var chunks = prize.match(/\d+|[A-Z][a-z]*|[a-z]+/g);
       var num;
-      var image;
+      var src;
       var dir;
       var chestName;
       
       chunks.forEach(function( chunk ){
-         if ("K" == chunk) isResource = isResource || true;
-         if ("Troop" == chunk) isTroop = isTroop || true;
-         if ("Chest" == chunk) isChest = isChest || true;
-         if ("Gold" == chunk) isGold = isGold || true;
+         if (    "K" == chunk) isResource = true;
+         if ("Troop" == chunk) isTroop = true;
          if ("Stack" == chunk) isTroop = false;
-         if (!isNaN(chunk)) num = chunk;
+         if ("Chest" == chunk) isChest = true;
+         if ( "Gold" == chunk) isGold = true;
+         if (  "Egg" == chunk) isEgg = true;
+         if (   !isNaN(chunk)) num = chunk;
       });
       if (isTroop) {
          dir = "troops/";
-         image = chunks.slice(0, chunks.indexOf(num)).join("");
+         src = chunks.slice(0, chunks.indexOf(num)).join("");
       } else {
          dir = "item/";
          if (isResource) {
-            if (isGold) image = "gold";
-            else        image = chunks[0].toLowerCase() + "50k";
+            if (isGold) src = "gold";
+            else        src = chunks[0].toLowerCase();
          } else if (isChest) {
             chestName = "configurablechest" + num;
-            image = chests[chestName] || "configurablechest";
+            src = "configurablechest";
+            GameData.retrieve("chests", function( data, error ){
+               if (error) {
+                  w.error("Erreur pas trop grave",
+                     "Je n'ai pas pu charger les images de coffres, " +
+                     "ils auront tous l’image par défaut.\n" +
+                     "(raison\xA0:\n" + error + ")");
+                  return;
+               }
+               if (prize in data) setTimeout(function( ){
+                  $img.src = Ajax.vars.s3Server + "/flash/assets/" +
+                     dir + data[prize];
+               }, 0);
+            });   
+         } else if (isEgg) {
+            var eggType = chunks[1].toLowerCase();
+            if ("mephitic" == eggType) eggType = "swamp";
+            if (   "helio" == eggType) eggType = "desert";
+            src = eggType + "dragonegg";
+         } else {
+            src = chunks.join("").toLowerCase();
          }
-         else image = chunks.join("").toLowerCase();
       }
-      return Ajaxvars.s3Server + "/flash/assets/" + dir + image + ".jpg";
+      $img.onerror = function( ){
+         debug(prize, this.src);
+      };
+      $img.src = Ajax.vars.s3Server +
+         "/flash/assets/" + dir + src + ".jpg";
    }
 
    function requestList( e, ticketType ){
       ticketType = ticketType || e.target.dataset.ticketType;
       w.wait();
       
-      ajaxGet(Ajaxvars.apiServer + "/minigames/index.json",
-         { ticket_type: ticketType },
-         function( r ){
-            var json = JSON.parse(r.responseText);
-            var timestamp = Math.floor(json.timestamp);
+      Ajax.getJson({
+         url: Ajax.vars.apiServer + "/minigames/index.json",
+         parameters: { ticket_type: ticketType },
+         onload: function( r ){
+            var json = r.response;
+            var timestamp = json.timestamp | 0;
             var prizeList = json.result.prize_list;
             
             var $heading = document.createElement("h4");
@@ -774,46 +895,51 @@ new Module("Fortuna", function( w ){
                
                var type = prize.type;
                $img = document.createElement("img");
-               $img.alt = type;
                $img.width = 228;
                $img.height = 152;
-               $img.src = getPrizeImageSrc(type);
-               $cell.appendChild($img);
                
                $span = document.createElement("span");
-               $span.textContent = type;
-               $cell.appendChild($span);
+               $span.textContent = $img.alt;
+               
+               var $div = document.createElement("div");
+               $div.appendChild($img);
+               $div.appendChild($span);
+               $cell.appendChild($div);
+               setupPrizeInfo(type, $img, $span);
             }
             
             var $ok = document.createElement("a");
             ClassName.add($ok, "button");
             $ok.textContent = "Ok";
-            $ok.title = "Je tente, me file pas de la merde cette fois-ci…";
+            $ok.title = "Je tente, me file pas de la merde cette fois…";
             $ok.addEventListener("click", function( ){
                w.wait();
-               ajaxPost(Ajaxvars.apiServer + "/minigames/save_result.json",
-                  {
+               Ajax.signedPost({
+                  url: Ajax.vars.apiServer +
+                     "/minigames/save_result.json",
+                  responseType: "json",
+                  parameters: {
                      ticket_type: ticketType,
                      minigame_timestamp: timestamp
                   },
-                  function( r ){
+                  onload: function( r ){
                      var $h4 = document.createElement("h4");
                      $h4.textContent = "Vous avez gagné\xA0:";
                      
                      var $img = document.createElement("img");
-                     var result = JSON.parse(r.responseText).result;
+                     var result = r.response.result;
                      if (!result.success) {
                         w.error("Échec", result.reason, function( ){
                            displayMenu();
                         });
                         return;
                      }
+                     GameData.update("player");
+                     
                      var prizeType = result.item_won.type;
-                     $img.alt = prizeType;
-                     $img.src = getPrizeImageSrc(prizeType);
                      
                      var $span = document.createElement("span");
-                     $span.textContent = prizeType;
+                     setupPrizeInfo(prizeType, $img, $span);
                      
                      var $p = document.createElement("p");
                      $p.id = "fortuna-prize";
@@ -829,22 +955,25 @@ new Module("Fortuna", function( w ){
                      $okP.appendChild($button);
                      
                      w.update([$h4, $p, $okP]);
-                  });
-            }, false);
+                  }
+               });
+            });
             
             var $change = document.createElement("a");
             ClassName.add($change, "button");
             $change.textContent = "Changer";
-            $change.title = "C’est de la daube tes trucs, sers-moi autre chose";
+            $change.title = "C’est de la daube, sers-moi autre chose";
             $change.addEventListener("click", function( ){
                requestList(null, ticketType);
-            }, false);
+            });
             
             var $cancel = document.createElement("a");
             ClassName.add($cancel, "button");
             $cancel.textContent = "Annuler";
-            $cancel.title = "Ça me saoûle, je laisse tomber pour l’instant";
-            $cancel.addEventListener("click", displayMenu, false);
+            $cancel.title = "Ça me saoûle, je laisse tomber";
+            $cancel.addEventListener("click", function( ){
+               w.close();
+            });
             
             var $ul = document.createElement("ul");
             ClassName.add($ul, "button-list");
@@ -859,23 +988,26 @@ new Module("Fortuna", function( w ){
             $cancelLi.appendChild($cancel);
             
             w.update([$heading, $table, $ul]);
-         });
+         }
+      });
    }
    
    function displayMenu( ){
       w.wait();
-      retrieveGameData("player", function( playerData, error ){
-         if (error) w.error("Chargement de player.json échoué", error,
-            w.close);
+      GameData.retrieve("player", function( playerData, error ){
+         if (error) {
+            w.error("Je n’ai pas pu charger player.json",
+               error, function( ){ w.close(); });
+            return;
+         }
          
          var tickets = playerData.tickets;
          var items = playerData.items;
-         var regular = 1 * items.FortunasTicket + 1 * tickets.fortunas_chance;
-         var golden = 1 * items.FoundersChest + 1 * tickets.gold_club;
+         var regular = (tickets.fortunas_chance | 0) +
+            (items.FortunasTicket | 0);
+         var golden = (tickets.gold_club | 0); // + (items.XXX | 0)
          var retention = playerData.retention;
          var contents = [];
-         var $button;
-         var s;
          
          var $h4 = document.createElement("h4");
          $h4.textContent = "C’est pourri, c’est gratuit";
@@ -915,6 +1047,8 @@ new Module("Fortuna", function( w ){
             contents.push($p);
          }
          
+         var s;
+         var $button;
          if (regular) {
             $button = document.createElement("a");
             ClassName.add($button, "button");
@@ -929,7 +1063,7 @@ new Module("Fortuna", function( w ){
          }
          
          if (golden) {
-            var $button = document.createElement("a");
+            $button = document.createElement("a");
             ClassName.add($button, "button");
             s = golden > 1 ? "s" : "";
             $button.textContent = golden + " médaillon" + s;
@@ -948,32 +1082,105 @@ new Module("Fortuna", function( w ){
 
 // [@DAT] Données de jeu ///////////////////////////////////////////////
 
-var GameDataUrls = {
-   player:   "{apiServer}/player.json",
-   chests:   "{s3Server}/flash/assets/item/thumbnails.json?b={lazyLoadedSwfCachebreaker}",
-   manifest: "{apiServer}/manifest.json",
-   map:      "{s3Server}{s3SwfPrefix}/map.bin?b={mapBinCacheBreaker}"
-};
-var retrieveGameData = (function( ){
+var GameData = (function( ){
    var _cache = {};
    
-   return function retrieveGameData( key, callback ){
-      if (key in _cache) {
-         callback(_cache[key]);
-      } else {
-         ajaxGet(GameDataUrls[key].replace(/\{([^\}]+)\}/g,
-            function( _, varName ){
-               return Ajaxvars[varName];
-            }),
-         {}, function( r ){
-            try {
-               var json = JSON.parse(r.responseText);
-               _cache[key] = json;
-               callback(json);
-            } catch (e) {
-               callback(null, e);
+   var _keys = {
+      player: {
+         url: "{apiServer}/player.json",
+         loadMethod: "getJson"
+      },
+      chests: {
+         url: "{s3Server}/flash/assets/item/thumbnails.json?b={lazyLoadedSwfCachebreaker}",
+         loadMethod: "getJson"
+      },
+      manifest: {
+         url: "{apiServer}/manifest.json",
+         loadMethod: "getJson"
+      },
+      map: {
+         url: "{s3Server}{s3SwfPrefix}/map.bin?b={mapBinCacheBreaker}",
+         loadMethod: "getBinary"
+      },
+      langFr: {
+         url: "{apiServer}/locales/fr.xml",
+         loadMethod: "getXml"
+      }
+   };
+   
+   return {
+      retrieve: function retrieve( key, callback ){
+         if (key in _cache) {
+            
+            if (callback) callback(_cache[key]);
+            
+         } else {
+         
+            var handler = _keys[key];
+            if (!handler.pendingRequests) handler.pendingRequests = [];
+            if (!handler.pendingRequests.length) {
+               Ajax[handler.loadMethod](Object.extend(handler.options, {
+                  url: handler.url.replace(/\{([^\}]+)\}/g,
+                     function( _, varName ) Ajax.vars[varName]),
+                     
+                  onload: function( response ){
+                     var data = response.response;
+                     _cache[key] = data;
+                     window.dispatchEvent(
+                        new CustomEvent(key + "Loaded", {
+                           bubbles: false,
+                           cancelable: false,
+                           detail: { data: data }
+                        }));
+                     var request;
+                     while (request = handler.pendingRequests.pop())
+                        request(data);
+                  },
+                  
+                  onerror: function( error ){
+                     var request;
+                     while (request = handler.pendingRequests.pop())
+                        request(null, error);
+                  }
+               }));
             }
+            handler.pendingRequests.push(callback);
+         }
+      },
+      
+      retrieveMulti: function retrieveMulti( keys, callback ){
+         var requirementsCount = keys.length;
+         var multiError = {};
+         var multiData = {};
+         
+         function decreaseAndCheck( ){
+            if (!--requirementsCount)
+               callback(multiData, multiError);
+         }
+         
+         keys.forEach(function( key ){
+            if (GameData.isLoaded(key)) decreaseAndCheck();
+            GameData.retrieve(key, function( data, error ){
+               multiData[key] = data;
+               multiError[key] = error;
+               decreaseAndCheck();
+            });
          });
+      },
+      
+      update: function update( key, newData ){
+         if (!newData) {
+            delete _cache[key];
+            GameData.retrieve(key);
+            return;
+         }
+         var data = _cache[key];
+         if (!data) return;
+         for (var name in newData) data[name] = newData[name];
+      },
+      
+      isLoaded: function isLoaded( key ){
+         return key in _cache;
       }
    };
 }());
@@ -981,17 +1188,17 @@ var retrieveGameData = (function( ){
 // [@INI] Initialisation du script /////////////////////////////////////
 
 // initialise l'objet flash, oui, celui qui ne devrait plus exister...
-// n'appeler cette fonction qu'après qu'Ajaxvars ait été peuplé
+// n'appeler cette fonction qu'après qu'Ajax.vars ait été peuplé
 function initSwf( $swf ){
    var $flashvars = $swf.querySelector("param[name=flashvars]");
    
    var overrideVars = {
       width: window.innerWidth,
       height: window.innerHeight,
-      paymentExtra: "/"
+      paymentExtra: "sblarff:" // protocole inexistant
    };
    for (var v in overrideVars)
-      Ajaxvars[v] = overrideVars[v];
+      Ajax.vars[v] = overrideVars[v];
    
    [
       // serveurs api et contenu
@@ -1030,6 +1237,14 @@ function initSwf( $swf ){
       "lazy_loaded_swf_cachebreaker",
       "map_bin_cachebreaker",
       
+      // cdn
+      "mode_is_cdn",
+      "preloader_url",
+      "ruby_store_url",
+      "assets_server",
+      "assets_prefix",
+      "statics_server",
+      
       // publicité
       "payment_extra",
       
@@ -1038,14 +1253,20 @@ function initSwf( $swf ){
       "subnetwork",
       "user_hash",
    ].forEach(function( name ){
-      var value = Ajaxvars[name.replace(/_(\w)/gi,
+      var value = Ajax.vars[name.replace(/_(\w)/gi,
          function( s, s1 ){ return s1.toUpperCase(); })];
       $flashvars.value += name + "=" + value + "&";
    });
    var v = $flashvars.value;
    $flashvars.value = v.substr(0, v.length - 1);
-   $swf.data = Ajaxvars.s3Server + Ajaxvars.s3SwfPrefix +
-      "/preloader.swf?cachebreaker=" + Ajaxvars.preloaderCachebreaker;
+      
+   if (Ajax.vars.modeIsCdn) {
+      $swf.data = Ajax.vars.preloaderUrl;
+   } else {
+      $swf.data = Ajax.vars.s3Server + Ajax.vars.s3SwfPrefix +
+         "/preloader.swf?cachebreaker=" +
+         Ajax.vars.preloaderCachebreaker;
+   }
 }
 
 function injectStyle( style ){
@@ -1061,9 +1282,11 @@ switch (location.hostname.match(/(\w+)\.\w+$/)[1]) {
 
 case "kabam": ///////////////////////////////////////////////////////
    
-   /* prévention des scripts : Firefox seulement.
-      Ce n'est pas vital mais ça économise pas mal de traitement
-      et de trafic réseau inutile. */
+   document.title = "HybriDoA";
+   
+   // prévention des scripts : Firefox seulement.
+   // Ce n'est pas vital mais ça économise pas mal de traitement
+   // et de trafic réseau inutile.
    document.addEventListener("beforescriptexecute", function( e ){
       e.preventDefault();
    });
@@ -1079,13 +1302,12 @@ case "kabam": ///////////////////////////////////////////////////////
       
       // nettoyage du HTML
       Array.prototype.forEach.call(
-         $html.querySelectorAll("script, style,\
-            link[rel='stylesheet']"),
+         $html.querySelectorAll("script, style, link[rel=stylesheet]"),
          function( $ ){ $.parentNode.removeChild($); }
       );
       Attribute.removeAll($html, "lang", "dir");
       $body.innerHTML = "";
-      Attribute.remove($body, "id", "class");
+      Attribute.removeAll($body);
       
       // repeuplement du DOM
       injectStyle("html, body, iframe {\
@@ -1094,39 +1316,46 @@ case "kabam": ///////////////////////////////////////////////////////
          height: 100%;\
          margin: 0;\
          border: none;\
+         overflow: hidden;\
+         background: black;\
+      }\
+      iframe {\
+         opacity: 0;\
+         transition: opacity 0.4s ease-in;\
       }");
       
       $body.appendChild($form);
       
       var $iframe = document.createElement("iframe");
-      $iframe.name = "game_frame";
       $iframe.src = "#";
       $iframe.width = window.innerWidth;
       $iframe.height = window.innerHeight;
+      $iframe.onload = function( ){ this.style.opacity = "1"; };
       $body.appendChild($iframe);
       
       // lancement du jeu
+      $form.target = $iframe.name = "hybridoa-iframe";
       $form.submit();
       
    });
    break;
 
 case "wonderhill": //////////////////////////////////////////////////
-   
-   
-   debug("body loaded?", document.body);
+   // Attenion : expose() ne fonctionne pas ici, car unsafeWindow
+   // renvoie le contexte de l'iframe.
    
    if (FIREFOX) {
       // annule les scripts et récupère les valeurs de C.attrs.
       document.addEventListener("beforescriptexecute", function( e ){
          e.preventDefault();
-         var regexp = /^\s*C\.attrs\.(\w+)\s+= ([^;$]+)/gm;
+         var regexp = /^\s*C\.attrs\.(\w+)\s+=\s*([^;$]+)/gm;
+         //                C .attrs .( 1 )   =   (  2   )
          var text = e.target.textContent;
          var match;
          while (match = regexp.exec(text)) {
             // le bloc try/catch prévient une erreur à cause des
             // labels incorrects dans googlePaymentTokens
-            try { Ajaxvars[match[1]] = eval(match[2]); } catch (_) {}
+            try { Ajax.vars[match[1]] = eval(match[2]); } catch (_) {}
          }
       }, false);
    }
@@ -1134,35 +1363,37 @@ case "wonderhill": //////////////////////////////////////////////////
    document.addEventListener("DOMContentLoaded", function( ){
       var $html = document.documentElement;
       var $body = document.body;
+      $body.onload = "";
+      $body.onresize = "";
       
       if (!FIREFOX) {
-         /* Les scripts n'ont pas été annulés, il va falloir faire un 
-         peu de travail dessus… */
+         // Navigateurs non Firefox : les scripts n'ont pas été annulés
+         // par beforescriptexecute, il va falloir faire un peu de
+         // travail dessus…
          
+         // V6 est une usine à gaz inutile, on empêche son chargement
          unsafeWindow.V6.go = function( ){};
          
-         /* redéfinit la fonction platforms_kabam_game_show, qui est
-         appelée juste après que les variables de C.attrs aient été
-         initialisées. Ceci permet de récupérer ces variables et de
-         prévenir du même coup le chargement du Flash. */
+         // redéfinit la fonction platforms_kabam_game_show, qui est
+         // appelée juste après que les variables de C.attrs aient été
+         // initialisées. Ceci permet de récupérer ces variables et de
+         // prévenir du même coup le chargement du Flash.
          var C = unsafeWindow.C;
          C.views.platforms_kabam_game_show = function( ){
             var Cattrs = C.attrs;
             for (var attr in Cattrs)
-               Ajaxvars[attr] = Cattrs[attr];
+               Ajax.vars[attr] = Cattrs[attr];
          };
       }
       
       // nettoie le html
-      Attribute.remove($html, "xmlns:fb");
+      Attribute.removeAll($html, "xmlns");
       $html.lang = "fr";                        // i18n
       $html.setAttribute("xml:lang", "fr-FR");  // i18n
       $body.innerHTML = "";
-      debug($body);
       Attribute.removeAll($body);
-      debug($body);
       Array.prototype.forEach.call(document.querySelectorAll(
-         "style, link[type='text/css'], script"),
+            "style, link[type='text/css'], script"),
          function( $ ){ $.parentNode.removeChild($); });
       
       // insère le nouveau contenu
@@ -1171,21 +1402,36 @@ case "wonderhill": //////////////////////////////////////////////////
       var $html = document.documentElement;
       var $body = document.body;
       
-      document.title = "HybriDoA";
       $body.innerHTML = GM_getResourceText("html");
       var $controls = document.getElementById("controls");
       var $swf = document.getElementById("swf");
       
+      function stopFlash( ){
+         var $parent = $swf.parentNode;
+         if ($parent) $parent.removeChild($swf);
+      }
+      
       // boutons de contrôle du flash
       var $startButton = document.getElementById("start-button");
       var flashLoaded = false;
+      
+      // timer pour stopper le flash quand Cassandra apparaît
+      var cassandraTimer;
+      const CASSANDRA_DELAY = 420 * 1000;
+      window.addEventListener("mousemove", function( e ){
+         clearTimeout(cassandraTimer);
+         cassandraTimer = setTimeout(stopFlash, CASSANDRA_DELAY);
+      });
+      
       $startButton.addEventListener("click", function( event ){
          event.preventDefault();
+         
+         clearTimeout(cassandraTimer);
+         cassandraTimer = setTimeout(stopFlash, CASSANDRA_DELAY);
+         
          this.textContent = "…";
          var that = this;
-         setTimeout(function( ){
-            that.textContent = "Restart";
-         }, 2000);
+         setTimeout(function( ){ that.textContent = "Restart"; }, 2000);
          
          if (!flashLoaded) {
             initSwf($swf);
@@ -1213,8 +1459,7 @@ case "wonderhill": //////////////////////////////////////////////////
             
             flashLoaded = true;
          } else {
-            var $parent = $swf.parentNode;
-            if ($parent) $parent.removeChild($swf);
+            stopFlash();
             setTimeout(function( ){
                $body.insertBefore($swf, $body.firstChild);
             }, 700);
@@ -1224,8 +1469,7 @@ case "wonderhill": //////////////////////////////////////////////////
       var $stopButton = document.getElementById("stop-button");
       $stopButton.addEventListener("click", function( event ){
          event.preventDefault();
-         var $parent = $swf.parentNode;
-         if ($parent) $parent.removeChild($swf);
+         stopFlash();
       });
       
       Module.initAll();
@@ -1242,99 +1486,222 @@ const DORSAL_SPINES = "LandCrocodile";
 const LEVIATHON = "Bevar-Asp";
 const DRACO = "Draoumculiasis";
 
-var Ajaxvars = {};
-expose(Ajaxvars, "Ajaxvars");
-var staticParams;
-
-function _ajax( request ){
-   var broker = new XMLHttpRequest();
-   broker.onreadystatechange = function( ){
-      console.info(this.readyState, this.status);
-      if (XMLHttpRequest.DONE == this.readyState) {
-         if (200 == this.status) request.onload(this);
-      }
-   };
-   var method = request.method.toUpperCase();
-   broker.open(method, request.url);
-   if ("POST" == method) {
-      broker.setRequestHeader("content-type",
-         "application/x-www-form-url-encoded");
-   }
-   if (request.headers) {
-      for (var [header, value] in Iterator(request.headers)) {
-         broker.setRequestHeader(header, value);
-      }
-   }
-   broker.send("POST" == method ? request.data : null);
-};
-
-function getTimestamp( ){
-   return new String(new Date() / 1000 | 0);
-};
-
-function getMandatoryParams( ){
-   if (!staticParams) {
-      staticParams = "_session_id=" + Ajaxvars.sessionId +
-         "&dragon_heart=" + Ajaxvars.dragonHeart +
-         "&user_id=" + Ajaxvars.userId +
-         "&version=" + VERSION +
-         "&timestamp=";
-   }
-   return staticParams + getTimestamp();
-};
-expose(getMandatoryParams, "getMandatoryParams");
-
-function ajaxError( ajax ){
-   console.error(ajax.status, ajax.statusText, ajax.responseText);
-}
-
-function ajaxGet( url, params, callback, options ){
-   params = params || {};
-   var data = "?";
-   for (var p in params)
-      data += p + "=" + params[p] + "&";
-   data += getMandatoryParams();
-   var request = {
-      method: "get",
-      url: url + data,
-      onerror: ajaxError,
-      onload: callback
-   };
-   if (options) {
-      for (var optName in options) {
-         request[optName] = options[optName];
-      };
-   }
-   GM_xmlhttpRequest(request);
-};
-
-function ajaxPost( url, params, callback, isSigned ){
-   if (undefined === isSigned) isSigned = true;
-   params = params || {};
-   var data = "";
-   for (var p in params)
-      data += p + "=" + params[p] + "&";
-   data += getMandatoryParams();
+var Ajax = {
+   vars: {},
    
-   var headers = {};
-   if (isSigned) {
-      var str = DRACO + data + DORSAL_SPINES + url + LEVIATHON;
-      var sig = SHA1(str);
-      headers = {
+   // format de timestamp en secondes utilisé par le jeu
+   getTimestamp: function getTimestamp( ) "" + (new Date() / 1000 | 0),
+   
+   // les paramètres requis pour toute requête vers Wonderhill
+   get mandatoryParameters( ) ({
+      "_session_id" : Ajax.vars.sessionId,
+      "dragon_heart": Ajax.vars.dragonHeart,
+      "user_id"     : Ajax.vars.userId,
+      "version"     : VERSION,
+      "timestamp"   : Ajax.getTimestamp()
+   }),
+   
+   // transforme un objet en chaîne de paramètres d'URL
+   serialize: function serialize( object ){
+      var chunks = [];
+      for (var prop in object) {
+         chunks.push(encodeURIComponent(prop) + "=" +
+            encodeURIComponent(object[prop]));
+      }
+      return chunks.join("&");
+   },
+   
+   // méthode de gestion d'erreur par défaut
+   error: function error( message ){
+      console.error(this, message);
+   },
+   
+   /** méthode de plus bas niveau : sur elle reposent toutes les autres
+   * @param {object} options
+   *  un objet contenant :
+   *            method  (requis) la méthode HTTP ("post" ou "get")
+   *                    
+   *               url  (requis) l'URL de la requête
+   *  
+   *        parameters  un objet contenant les paramètres de la requête
+   *                    
+   *              data  la chaîne de paramètres
+   *                    (si spécifiée, parameters est ignoré)
+   *                    
+   *           headers  un objet contenant des en-têtes additionnels
+   *                    
+   *      responseType  le type de réponse attendu
+   *                    ("arraybuffer", "json", ou "text")
+   *                    
+   *  overrideMimeType  un type MIME à forcer
+   *                    
+   *            onload  la fonction à appeler en cas de succès
+   *                    
+   *        onprogress  la fonction à appeler à chaque paquet reçu
+   *                    
+   *           onerror  la fonction à appeler en cas d'erreur
+   *
+   * Important :
+   * le paramètre passé aux fonctions de rappel s'inspire de la norme
+   * XMLHttpRequest niveau 2. En particulier, il possède une propriété
+   * `response` dont le type dépend de `responseType`. Ainsi, les
+   * fonctions de rappel n'ont pas besoin de traiter `responseText` si
+   * le bon `responseType` a été demandé.
+   */
+   request: function request( options ){
+      var method = options.method.toLowerCase();
+      var url = options.url;
+      var data = options.data || Ajax.serialize(Object.extend(
+         options.parameters, Ajax.mandatoryParameters));
+      if ("get" == method) url += "?" + data;
+      var headers = options.headers || {};
+      
+      var nop = function( ){};
+      var onprogress = options.onprogress || nop;
+      var onerror = options.onerror || Ajax.error;
+      
+      if (USE_GM_XHR) {
+      
+         var gmOptions = {
+            method    : method,
+            url       : url,
+            headers   : headers,
+            onprogress: onprogress,
+            onerror   : onerror
+         };
+         if ("post" == method) gmOptions.data = data;
+         
+         if (options.onload) switch (options.responseType) {
+         
+            case "arraybuffer":
+               // spécifie volontairement un charset inconnu pour que le
+               // navigateur ne transforme pas les données binaires
+               gmOptions.overrideMimeType =
+                  "text/plain; charset=x-user-defined";
+               gmOptions.onload = Ajax.switchCallback(function( r ){
+                     var text = r.responseText;
+                     var buffer = new ArrayBuffer(text.length);
+                     var bytes = new Uint8Array(buffer);
+                     for (var i = text.length; i--;)
+                        bytes[i] = text.charCodeAt(i) & 0xff;
+                     // TODO 
+                     // ce traitement est potentiellement long
+                     // (le fichier map.bin fait environ 550 Ko)
+                     // => envisager l'utilisation d'un Web Worker ?
+                     
+                     var tweakedResponse = Object.extend({
+                        response: buffer
+                     }, r);
+                     options.onload.call(this, tweakedResponse);
+                  }, options.onerror);
+               break;
+               
+            case "json":
+               gmOptions.onload = Ajax.switchCallback(function( r ){
+                     try {
+                        var tweakedResponse = Object.extend({
+                           response: JSON.parse(r.responseText)
+                        }, r);
+                        options.onload.call(this, tweakedResponse);
+                     } catch (error) {
+                        error.relatedData = r;
+                        (options.onerror || Ajax.error).call(this, error);
+                     }
+                  }, options.onerror);
+               break;
+            
+            case "text":
+            case "xml":
+            default:
+               gmOptions.onload = Ajax.switchCallback(function( r ){
+                     var tweakedResponse = Object.extend({
+                        response: r.responseText
+                     }, r);
+                     options.onload.call(this, tweakedResponse);
+                  },
+                  options.onerror
+               );
+               
+         }
+         
+         if (options.overrideMimeType)
+            gmOptions.overrideMimeType = options.overrideMimeType;
+         GM_xmlhttpRequest(gmOptions);
+         
+      } else {
+         debug("using native XMLHttpRequest");
+         
+         var url = options.url + "get" == method ? "?" + data : "";
+         
+         var broker = new XMLHttpRequest();
+         broker.open(method, url);
+         
+         if ("post" == method)
+            headers["content-type"] = "application/x-www-form-encoded";
+         
+         for (var header in headers)
+            broker.setRequestHeader(header, headers[header]);
+         broker.responseType = options.responseType || "";
+         if (options.overrideMimeType)
+            broker.overrideMimeType(options.overrideMimeType);
+         
+         broker.onload = options.onload || nop;
+         broker.onprogress = options.onprogress || nop;
+         broker.onerror = options.onerror || Ajax.error;
+         
+         broker.send("post" == method ? data : null);
+         
+      }
+   },
+   
+   switchCallback: function switchCallback( onsuccess, onerror ){
+      return function( response ){
+         if (200 == response.status) onsuccess(response);
+         else (onerror || Ajax.error)(response);
+      };
+   },
+
+   get: function get( options ){
+      options.method = "get";
+      Ajax.request(options);
+   },
+   
+   getJson: function getJson( options ){
+      options.responseType = "json";
+      Ajax.get(options);
+   },
+   
+   getBinary: function getBinary( options ){
+      options.responseType = "arraybuffer";
+      Ajax.get(options);
+   },
+   
+   getXml: function getXml( options ){
+      // DoA XML files aren't well formed, so I treat it as text
+      options.overrideMimeType = "text/plain";
+      Ajax.get(options);
+   },
+   
+   post: function post( options ){
+      options.method = "post";
+      Ajax.request(options);
+   },
+   
+   signedPost: function signedPost( options ){
+      var data = options.data || Ajax.serialize(
+         Object.extend(options.parameters, Ajax.mandatoryParameters));
+      options.data = data;
+      var phrase =
+         DRACO + data + DORSAL_SPINES + options.url + LEVIATHON;
+      var sig = SHA1(phrase);
+      options.headers = Object.extend(options.headers, {
          "Content-length": data.length,
          "Content-type": "application/x-www-form-urlencoded",
          "X-S3-AWS": sig
-      };
+      });
+      Ajax.post(options);
    }
-   
-   GM_xmlhttpRequest({
-      method: "post",
-      url: url,
-      data: data,
-      onload: callback,
-      onerror: ajaxError,
-      headers: headers
-   });
+
 };
 
 // [@SHA] Implémentation JavaScript du SHA-1 ///////////////////////////
