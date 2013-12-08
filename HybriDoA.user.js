@@ -1,14 +1,12 @@
 // ==UserScript==
 // @name          HybriDoA
-// @namespace     fr.kergoz-panik.watilin
-// @version       0.0
-// @description   Projet de remplacer le SWF par du pur HTML5/JavaScript
-// 
+// @namespace     fr.kergoz-panic.watilin
+// @version       0.1
+// @description   Projet de remplacer le SWF par du pur HTML5
+//
 // @include       https://www.kabam.com/fr/games/dragons-of-atlantis/play*
 // @match         https://*.castle.wonderhill.com/platforms/kabam/*
-// @exclude       *?gm=no*
-// @exclude       *&gm=no*
-// 
+//
 // @icon          hybridoa.png
 // @resource      html        hybridoa.html
 // @resource      style       hybridoa.css
@@ -18,7 +16,7 @@
 // @grant         GM_xmlhttpRequest
 // @grant         GM_getResourceText
 // @grant         GM_getResourceURL
-// 
+//
 // @homepage      https://github.com/Watilin/HybriDoA#hybridoa
 // @author        Watilin
 // @copyright     2013+, Watilin
@@ -27,139 +25,76 @@
 
 /* >>>>>>>>>>>>>>>>>>>>>>> IMPORTANT! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
-Ce script est actuellement une ÉBAUCHE. Il me sert à tester la
-faisabilité de mes objectifs. Il comporte des fonctionnalités qui ne
-marchent pas ou sont incompréhensibles, et peut-être même des failles
-de sécurité. NE L'INSTALLEZ PAS à moins que vous vouliez suivre mon
-travail ou vous en inspirer.
-
 This script is currently a DRAFT. I’m using it to test the feasability
 of my goals. It includes defective or incomprehensible features, and
 perhaps even security flaws. DO NOT INSTALL IT unless you want to follow
 up my work or get inspired by it.
 */
 
-/* Marqueurs :
-   todo, xxx, here, i18n, temp
+/* Marks:
+   todo, xxx, here, temp
 */
 
 /* TODO
-Vues
-   - une vue de la ville principale (bâtiments & niveaux)
-   - une vue de la carte (terrains & propriétaires)
-   - liste des jobs
-   - une vue des champs de la ville principale
-   - une vue de chaque avant-poste (champs & cité)
-   
+Views
+   - a Main City view (buildings & levels)
+   - a Map view (terrains & owners)
+   - a jobs list
+   - a Main City's fields view
+   - a view of each outpost (fields & city)
+
 Actions
-   - construction/amélioration de bâtiments
-   - lancement de marches
-   - entraînement de troupes
-   - recherches
-   
+   - creating/enhancing buildings
+   - sending marches
+   - training troops
+   - researching
+
 Messages
-   - consultation des anciennes pages
-   - suppression
-   
+   - viewing old pages
+   - deleting one or more messages
+
 Alliance
-   (à définir)
-   
-Automatisation
-   (à définir)
-   
+   - a member's list with sorting features
+
+Automatization
+   (to be defined)
+
 Script
-   - gestion des raccourcis clavier
+   - keyboard shortcut handling
    - i18n
 
 Style
-   - 
+   -
 */
 
-/* Sommaire
+/* Table Of Contents
 
-Les sections sont étiquetées avec un arobase (@). Utilisez la
-fonction recherche pour naviguer entre les sections. Par exemple,
-pour la section [XYZ], tapez « @XYZ ».
-  [NAV] Détection du navigateur
-  [DBG] Utilitaires de débogage
-  [UTI] Divers utilitaires
-  [WIN] Constructeur Window
+Sections are label with arobases (@). Use the “search” function to
+navigate between sections. For example, for section [XYZ], type “@XYZ”.
+  [NAV] Browser Detection
+  [UTI] Misc Utilities
+  [DBG] Debug Utilities
+  [WIN] Window Constructor
   [MOD] Modules
-  [INI] Initialisation du script
-  [AJX] Primitives Ajax
-  [SHA] Implémentation JavaScript du Sha-1
+  [DAT] Game Data
+  [INI] Script Initialization
+  [AJX] Ajax Primitives
+  [SHA] A JavaScript Implementation of Sha-1
 */
 
 "use strict";
 
-// [@NAV] Détection du navigateur //////////////////////////////////////
+// [@NAV] Browser Detection ////////////////////////////////////////////
 
 var ua = navigator.userAgent;
-const FIREFOX = ua.search(/firefox/i) >= 0;
+var FIREFOX = ua.search(/firefox/i) >= 0;
 
-// passer à false quand on aura pu se débarasser de GM_xmlhttpRequest
-const USE_GM_XHR = true;
+// set to false when we won't need GM_xmlhttpRequest anymore
+var USE_GM_XHR = true;
 
-// [@DBG] Utilitaires de débogage //////////////////////////////////////
+// [@UTI] Misc Utilities ///////////////////////////////////////////////
 
-// affiche l'objet dans la console disponible
-var debug = (function( ){
-   var c = unsafeWindow.console || console;
-   if (c) return c.debug || c.log;
-   
-   var $console;
-   var firstLogs = [];
-   var isInserted = false;
-   $console = document.createElement("pre");
-   $console.id = "console";
-   document.addEventListener("DOMContentLoaded", function( ){
-      document.body.appendChild($console);
-      isInserted = true;
-      firstMessages.forEach(function( message ){ debug(message); });
-   }, false);
-   
-   function debug( message ){
-      if (isInserted) {
-         var $message = document.createElement("div");
-         var $time = document.createElement("time");
-         var $child = $console.firstChild;
-         $time.textContent = new Date().toLocaleTimeString();
-         $message.appendChild($time);
-         $message.appendChild(document.createTextNode(message));
-         if ($child) $console.insertBefore($message, $child);
-         else $console.appendChild($message);
-      } else {
-         firstMessages.push(message);
-      }
-   }
-   
-   return debug;
-}());
-
-// rend visible l'objet dans le contexte de la page
-var expose = (function( ){
-   var exposeName;
-   var exposeArray = [];
-   return function expose( obj, name ){
-      if (name) {
-         unsafeWindow[name] = obj;
-      } else {
-         if (!exposeName) {
-            // choisit un nom qui n'existe pas déjà
-            exposeName = "exposed_";
-            while (exposeName in unsafeWindow) {
-               exposeName += Math.random() * 1e16 | 0;
-            }
-            unsafeWindow[exposeName] = exposeArray;
-         }
-         exposeArray.push(obj);
-      }
-   };
-}());
-
-// [@UTI] Divers utilitaires ///////////////////////////////////////////
-
-// Extension d'objet
+// object extension
 Object.extend = function extend( subject, properties ){
    subject = subject || {};
    for (var p in properties)
@@ -167,8 +102,8 @@ Object.extend = function extend( subject, properties ){
    return subject;
 };
 
-// Donne une description approximative de la durée écoulée entre la date
-// donnée et maintenant, en omettant les unités trop petites
+// Gives and approximative description of the elapsed duration between
+// the given date and now, overviewing too small units
 Date.prototype.ago = (function( ){
    var durations = {
            "an": 31536000000,
@@ -180,7 +115,7 @@ Date.prototype.ago = (function( ){
       "seconde": 1000
    };
    return function ago( ){
-      var diff = Math.abs(new Date() - this);
+      var diff = Math.abs(Date.now() - this);
       for (var name in durations) {
          var duration = durations[name];
          if (diff >= duration) {
@@ -193,22 +128,23 @@ Date.prototype.ago = (function( ){
    }
 }());
 
-// Gestion des classes HTML
-var ClassName = {
-   has: function hasClassName( $, c ){
-      return $.className.indexOf(c) >= 0;
-   },
-   add: function addClassName( $, c ){
-      if (!ClassName.has( $, c )) {
-         $.className += " " + c;
-      }
-   },
-   remove: function removeClassName( $, c ){
-      $.className = $.className.replace(new RegExp(" *" + c, "g"), "");
-   }
+// Gives a string formatted as dd/mm/yy hh:mm:ss
+Date.prototype.toShortFormat = function( ){
+   var date = this.getDate().pad(2);
+   var month = (this.getMonth() + 1).pad(2);
+   var year = (this.getFullYear() % 100).pad(2);
+
+   var hours = this.getHours().pad(2);
+   var minutes = this.getMinutes().pad(2);
+   var seconds = this.getSeconds().pad(2);
+
+   var days = ["dim", "lun", "mar", "mer", "jeu", "ven", "sam"];
+   return days[this.getDay()] + " " +
+      date + "/" + month + "/" + year + " " +
+      hours + ":" + minutes + ":" + seconds;
 };
 
-// Détecte la taille des barres de défilement
+// Detects scrollbars size
 var Scrollbars = (function( ){
    var w;
    var h;
@@ -231,7 +167,7 @@ var Scrollbars = (function( ){
    }
 }());
 
-// Tranforme le nombre en chaîne en remplissant avec des zéros si besoin
+// Tranforms the number into string, padding with zeros if needed
 Number.prototype.pad = function pad( digits ){
    var str = "" + this;
    var length = ("" + this).length;
@@ -242,7 +178,36 @@ Number.prototype.pad = function pad( digits ){
       return str;
 }
 
-// Gestion des attributs DOM
+// transforms the number in milliseconds into a string representation of
+// a time interval. Example: 9999d 23h 59mn 59s
+Number.prototype.toTimeInterval = function( ){
+   var s = this % 60 + "s";
+   var t = this / 60 | 0;
+   if (!t) return s;
+   s = t % 60 + "mn " + s;
+   t = t / 60 | 0;
+   if (!t) return s;
+   s = t % 24 + "h " + s;
+   t = t / 24 | 0;
+   if (!t) return s;
+   return t + "d " + s;
+};
+
+/** DOM attributes management
+ * @method remove
+ *    removes one or more attributes from an element
+ *    @param $element
+ *       the element from which remove the attributes
+ *    @param attributes
+ *       the attribute(s) to be removed
+ *
+ * @method removeAll
+ *    remove all of an element's attributes, except those given
+ *    @param $element
+ *       the element from which remove the attributes
+ *    @param except (optional)
+ *       zero, one or more attributes not to be removed
+ */
 var Attribute = {
    remove: function( $element, attributes ){
       attributes = attributes instanceof Array ?
@@ -261,12 +226,168 @@ var Attribute = {
          function( attr ) attr);
       Array.forEach(attributes, function( attr ){
          var name = attr.name;
-         if (except.indexOf(name) < 0) $element.removeAttribute(name); 
+         if (except.indexOf(name) < 0) $element.removeAttribute(name);
       });
    }
 };
 
-// [@WIN] Constructeur Window //////////////////////////////////////////
+/** Simplified button creation
+ * @param name
+ *    the button's visible name
+ * @param options (optional)
+ *    a map containing zero, one or more of the following options:
+ *    - className    one or more HTML classes to be added to the button
+ *    - onclick      a click event handler
+ *    - title        the text of the tooltip showing on mouseover
+ */
+function createButton( name, options ){
+   options = options || {};
+
+   var $button = document.createElement("a");
+   $button.textContent = name;
+
+   $button.classList.add("button");
+   if (options.className) $button.classList.add(options.className);
+
+   $button.href = "#";
+   $button.onclick = function( event ){
+      event.preventDefault();
+      if (options.onclick) options.onclick.call($button, event);
+   };
+
+   if (options.title) $button.title = options.title;
+
+   return $button;
+}
+
+// communication between Kabam and Wonderhill domains
+var currentHost = location.hostname.match(/(\w+)\.\w+$/)[1];
+var wonderhillOrigin;
+var wonderhillWindow;
+switch (currentHost) {
+   case "kabam":
+      window.onmessage = function( message ){
+         // at first the "kabam" part of the script doesn't know the
+         // Wonderhill server's full name, so we test it against a
+         // regexp, then we store the real name.
+         var origin = message.origin;
+         debug("[K<-W] ", message);
+         if (wonderhillOrigin) {
+            if (origin != wonderhillOrigin) return;
+         } else {
+            var regexp =
+               /^https:\/\/realm\d+\.c\d+\.castle\.wonderhill\.com$/;
+            if (!origin.match(regexp)) return;
+            wonderhillOrigin = origin;
+         }
+
+         // To keep things simple, messages will exclusively contain
+         // functions to be excuted within the other window's context.
+         // However, messages can't directly transport functions, so
+         // we have to serialize them with `toString` and deserialize
+         // them with `eval`.
+         var code = message.data.code;
+         try {
+            if (code) eval(code);
+         } catch (error) {
+            alert(error);
+         }
+      }
+
+      var executeOnWonderhill = function execW( f ){
+         wonderhillWindow.postMessage({ code: f.toString() },
+            wonderhillOrigin);
+      };
+      break;
+   case "wonderhill":
+      wonderhillWindow = this;
+      // the first message allows the "kabam" part to know the full name
+      // of the Wonderhill server.
+      top.postMessage("hi", "https://www.kabam.com");
+
+      window.onmessage = function( message ){
+         debug("[K->W] ", message);
+         if ("https://www.kabam.com" != message.origin) return;
+
+         var code = message.data.code;
+         try {
+            if (code) eval(code);
+         } catch (error) {
+            alert(error);
+         }
+      }
+
+      var executeOnKabam = function execK( f ){
+         top.postMessage({ code: f.toString() },
+            "https://www.kabam.com");
+      };
+      break;
+}
+
+// recursively replaces functions of the given object with their source
+// code, thus allowing it to be sent via postMessage
+function serializeFunctions( arg ){
+   // basic type case
+   if ("object" != typeof arg)
+      return arg;
+
+   // array case
+   if (arg instanceof Array)
+      return arg.map(item => serializeFunctions(item));
+
+   // object case
+   var clone = {};
+   for (var name in arg) if (arg.hasOwnProperty(name)) {
+      var prop = arg[name];
+      if ("function" == typeof prop)
+         clone[name] = prop.toString();
+      else
+         clone[name] = serializeFunctions(prop);
+   }
+   return clone;
+}
+
+// [@DBG] Debug Utilities //////////////////////////////////////////////
+
+// displays the object in the available console
+var debug = (function( ){
+   var c = unsafeWindow.console || console;
+   if (c) return c.debug || c.log;
+   return function( ){};
+}());
+
+// makes the object visible in the page's context
+var expose = top === window ?
+   (function( ){
+      var exposeName;
+      var exposeArray = [];
+      return function expose( obj, name ){
+         if (name) {
+            debug("exposed `" + name + "` in the main page's context");
+            unsafeWindow[name] = obj;
+         } else {
+            if (!exposeName) {
+               // picks a name that doesn't exist yet
+               exposeName = "exposed_";
+               while (exposeName in unsafeWindow) {
+                  exposeName += Math.random().toString(36).substr(2);
+               }
+               unsafeWindow[exposeName] = exposeArray;
+            }
+            debug("exposed anonymous contents in `" + exposeName + "`");
+            exposeArray.push(obj);
+         }
+      };
+   }()) :
+   function expose( obj, name ){
+      executeOnKabam("expose(" +
+         JSON.stringify(serializeFunctions(obj)) +
+         ", '" +
+         (name ? name.replace(/'/g, "\\'") : "") +
+         "');");
+   };
+
+// [@WIN] Window Constructor ///////////////////////////////////////////
 
 function Window( title, $control ){
    var $ = Window.template.cloneNode(true);
@@ -282,11 +403,11 @@ function Window( title, $control ){
    this.$spinner = $.querySelector("div.spinner-box");
    this.$error = $.querySelector("section.error");
    document.body.appendChild($);
-   
+
    window.addEventListener("resize", function( ){
       that.center();
    }, false);
-   
+
    this.$window.addEventListener("transitionend", function( event ){
       if (event.propertyName == "opacity") {
          if ("0" == this.style.opacity) {
@@ -295,12 +416,12 @@ function Window( title, $control ){
          }
       }
    });
-   
+
    this.$control = $control;
 }
 
 Window.prototype = {
-   
+
    $window: null,
    $container: null,
    $shader: null,
@@ -308,9 +429,9 @@ Window.prototype = {
    $error: null,
    $control: null,
    isOpened: false,
-   
+
    open: function open( ){
-      if (this.$control) ClassName.add(this.$control, "lit");
+      if (this.$control) this.$control.classList.add("lit");
       var style = this.$window.style;
       style.display = "block";
       style.opacity = "0";
@@ -318,7 +439,7 @@ Window.prototype = {
       this.isOpened = true;
       this.center();
    },
-   
+
    center: function( ){
       if (this.isOpened) {
          var style = this.$window.style;
@@ -332,23 +453,23 @@ Window.prototype = {
             Scrollbars.width : 0;
          var extraH = (windowW > $body.offsetWidth) ?
             Scrollbars.height : 0;
-         
+
          style.left = (windowW - extraW - computedW) / 2 + "px";
          style.top = (windowH - extraH - computedH) / 2  +"px";
       }
    },
-   
+
    close: function close( ){
-      if (this.$control) ClassName.remove(this.$control, "lit");
+      if (this.$control) this.$control.classList.remove("lit");
       this.$window.style.opacity = "0";
       // the rest is achieved by the "transitionend" listener
    },
-   
-   /** Vide la fenêtre puis insère le contenu donné
-    * @argument contents (optionnel)
-    *    une String ou un HTMLElement ou un tableau de HTMLElements
-    *    si String, remplit en utilisant textContent ;
-    *    sinon, ajoute l'élément avec appendChild().
+
+   /** Cleans the window then inserts the given contents
+    * @argument contents (optional)
+    *    a String or a HTMLElement or an array of HTMLElements
+    *    if String, fills using `textContent`;
+    *    otherwise, adds the element using `appendChild`.
     */
    update: function update( contents ){
       this.clear();
@@ -362,18 +483,20 @@ Window.prototype = {
       }
       this.center();
    },
-   
-   /** Vide la fenêtre
+
+   /** Empties the window's container and hides its' shader and error
+    * message.
     */
    clear: function clear( ){
       this.$container.innerHTML = "";
       this.$shader.style.display = "none";
+      this.$error.style.display = "none";
    },
-   
-   /** Assombrit la fenêtre et affiche un indicateur de chargement
-    * (spinner). En appelant wait(), vous signifiez que le contenu de la
-    * fenêtre n'est plus à jour, et vous ne pourrez pas le récupérer.
-    * utiliser update() ou clear() retirera l'ombre et le spinner.
+
+   /** Darkens the window and displays a loading indicator (spinner).
+    * By calling `wait`, you notify that the window's contents
+    * is not up-to-date anymore, and you won't be able to access it.
+    * Using `update` or `clear` will remove the shadow and the spinner.
     */
    wait: function wait( ){
       this.$shader.style.display = "block";
@@ -386,31 +509,31 @@ Window.prototype = {
       style.paddingLeft = ($w.offsetWidth - width) / 2 + "px";
       style.paddingTop = ($w.offsetHeight - height) / 2 + "px";
    },
-   
-   /** Affiche un message d'erreur, et associe éventuellement une action
-    * à exécuter une fois que l’utilisateur a lu le message
-    * @param {string} title     le titre du message d’erreur
-    * @param {string} message   le message d’erreur
-    * @param {function} next    (optionnel) l’action à exécuter
+
+   /** Displays an error message, and possibly attaches an action
+    * to be executed once the user has read the message
+    * @param {string} title     The error message's title
+    * @param {string} message   The error message
+    * @param {function} next    (optional) the action to be executed
     */
    error: function error( title, message, next ){
       this.$shader.style.display = "block";
-      
+
       var $spinner = this.$spinner;
       $spinner.style.display = "none";
       var $error = this.$error;
       $error.style.display = "block";
-      
+
       $error.querySelector("h4").textContent = title;
       $error.querySelector("p").textContent = message;
-      
+
       var w = this;
       var $window = w.$window;
       setTimeout(function( ){
          $window.style.minWidth = $error.offsetWidth + "px";
          $window.style.minHeight = $error.offsetHeight + "px";
       }, 0);
-      
+
       function click( ){
          this.removeEventListener("click", click, false);
          $error.style.display = "none";
@@ -429,7 +552,7 @@ Window.prototype = {
       <title/>
       <closeButton/>
       <container>
-         ... le contenu de la fenêtre ici
+         ... window contents here
       </container>
       <shader>
          <spinner>
@@ -438,7 +561,7 @@ Window.prototype = {
             <spinnerRight/>
          </spinner>
          <error>
-            ... message d’erreur
+            ... error message
          </error>
       </shader>
    </window>
@@ -446,57 +569,55 @@ Window.prototype = {
 
 Window.template = (function( ){
    var $window = document.createElement("section");
-   ClassName.add($window, "window");
-   
+   $window.classList.add("window");
+
    var $title = document.createElement("h3");
    $window.appendChild($title);
-   
-   var $closeButton = document.createElement("a");
-   ClassName.add($closeButton, "close-button");
-   $closeButton.textContent = "X";
-   $closeButton.title = "Fermer"
+
+   var $closeButton = createButton("X", {
+      className: "close-button",
+      title: "Fermer"
+   });
    $window.appendChild($closeButton);
-   
+
    var $container = document.createElement("div");
-   ClassName.add($container, "window-container");
+   $container.classList.add("window-container");
    $window.appendChild($container);
-   
+
    var $shader = document.createElement("div");
-   ClassName.add($shader, "window-shader");
+   $shader.classList.add("window-shader");
    $window.appendChild($shader);
-   
+
    var $spinner = document.createElement("div");
    var $spinnerLeft = document.createElement("div");
    var $spinnerMiddle = document.createElement("div");
    var $spinnerRight = document.createElement("div");
-   ClassName.add($spinner, "spinner-box");
-   ClassName.add($spinnerLeft, "spinner-left");
-   ClassName.add($spinnerMiddle, "spinner-middle");
-   ClassName.add($spinnerRight, "spinner-right");
+   $spinner.classList.add("spinner-box");
+   $spinnerLeft.classList.add("spinner-left");
+   $spinnerMiddle.classList.add("spinner-middle");
+   $spinnerRight.classList.add("spinner-right");
    $spinner.appendChild($spinnerLeft);
    $spinner.appendChild($spinnerMiddle);
    $spinner.appendChild($spinnerRight);
    $shader.appendChild($spinner);
-   
+
    var $error = document.createElement("section");
-   ClassName.add($error, "error");
+   $error.classList.add("error");
    $shader.appendChild($error);
-   
+
    var $errorHeading = document.createElement("h4");
    $errorHeading.textContent = "Erreur";
    $error.appendChild($errorHeading);
-   
+
    var $errorMessage = document.createElement("p");
    $error.appendChild($errorMessage);
-   
-   var $errorButton = document.createElement("a");
-   ClassName.add($errorButton, "button");
-   $errorButton.textContent = "Vu";
-   
+
+   var $errorButton = createButton("Vu");
+
    var $errorP = document.createElement("p");
    $errorP.appendChild($errorButton);
    $error.appendChild($errorP);
-   
+
    return $window;
 }());
 
@@ -512,28 +633,26 @@ Module.prototype = {
    exec: function( ){},
    init: function( $bar ){
       var $li = document.createElement("li");
-      var $button = document.createElement("a");
-      $button.textContent = this.name;
-      ClassName.add($button, "button");
+      var $button = createButton(this.name);
       $li.appendChild($button);
       $bar.appendChild($li);
-      
+
       var w = new Window(this.name, $button);
-      
+
       var that = this;
       $button.addEventListener("click", function( event ){
          event.preventDefault();
          if (w.isOpened) {
             w.close();
-            ClassName.remove($button, "lit");
+            $button.classList.remove("lit");
          } else {
             w.open();
             that.exec(w);
-            ClassName.add($button, "lit");
+            $button.classList.add("lit");
          }
       }, false);
    }
-   
+
 };
 Module.list = [];
 Module.initAll = function( ){
@@ -557,7 +676,7 @@ new Module("Royaume", function( w ){
       pt: "Portuguese"
    };
    var selectedLocale = "fr";
-   
+
    function refreshRealms( ){
       Ajax.get({
          url: Ajax.vars.serverUrl +
@@ -568,7 +687,7 @@ new Module("Royaume", function( w ){
          },
          onload: function( response ){
             var contents = [];
-            
+
             var $select = document.createElement("select");
             var $option;
             for (var loc in locales) {
@@ -578,48 +697,48 @@ new Module("Royaume", function( w ){
                if (loc == selectedLocale) $option.selected = true;
                $select.appendChild($option);
             }
-            
+
             var $label = document.createElement("label");
             $label.textContent = "Langue\xa0: ";
             $label.appendChild($select);
             var $p = document.createElement("p");
             $p.appendChild($label);
-            var $ok = document.createElement("a");
-            ClassName.add($ok, "button small");
-            $ok.textContent = "Ok";
-            $ok.title = "Valider le changement de la langue"
-            $ok.addEventListener("click", function( ){
-               var loc = $select.options[$select.selectedIndex].value;
-               Ajax.signedPost({
-                  url: location.href,
-                  parameters: { i18n_locale: loc },
-                  onload: function( ){
-                     selectedLocale = loc;
-                     w.wait();
-                     refreshRealms();
-                  },
-                  onerror: function( message ){
-                     w.error("Erreur",
-                        message + " / Ce n’est probablement qu’une " +
-                           "défaillance passagère du réseau, " + 
-                           "veuillez réesayer.",
-                        function( ){ w.close(); });
-                  }
-               });
-            }, false);
+            var $ok = createButton("Ok", {
+               className: "small",
+               title: "Valider le changement de la langue",
+               onclick: function( ){
+                  var loc = $select.options[$select.selectedIndex].value;
+                  Ajax.signedPost({
+                     url: location.href,
+                     parameters: { i18n_locale: loc },
+                     onload: function( ){
+                        selectedLocale = loc;
+                        w.wait();
+                        refreshRealms();
+                     },
+                     onerror: function( message ){
+                        w.error("Erreur",
+                           message + " / Ce n’est probablement " +
+                              "qu’une défaillance passagère du " +
+                              "réseau, veuillez réesayer.",
+                           function( ){ w.close(); });
+                     }
+                  });
+               }
+            });
             $p.appendChild(document.createTextNode(" "));
             $p.appendChild($ok);
             contents.push($p);
-            
+
             var $div = document.createElement("div");
             $div.innerHTML = response.response;
             var rawText = $div.textContent;
-            
+
             var $table = document.createElement("table");
             var $headRow = $table.createTHead().insertRow(-1);
             var $tbody = document.createElement("tbody");
             $table.appendChild($tbody);
-            
+
             var regexp = /^\S.*$/gm;
             var match;
             var $th;
@@ -629,7 +748,7 @@ new Module("Royaume", function( w ){
             var currentRealmId;
             var selectedRealmId;
             var $selectedRealm;
-            
+
             for (var i = -2; match = regexp.exec(rawText); i++) {
                if (i < 0) continue;
                if (i < 5) {
@@ -643,7 +762,7 @@ new Module("Royaume", function( w ){
                      $row = $tbody.insertRow(-1);
                      if (realmId ==
                            location.hostname.match(/realm(\d+)/)[1]) {
-                        ClassName.add($row, "selected-realm");
+                        $row.classList.add("selected-realm");
                         $selectedRealm = $row;
                         currentRealmId = realmId;
                      }
@@ -652,80 +771,79 @@ new Module("Royaume", function( w ){
                   $td.textContent = match[0];
                }
             }
-            
+
             if (i <= 5) {
                w.error("Désolé",
                   "Je n’ai pas pu récupérer la liste des royaumes…",
                   function( ){ w.close(); });
                return;
             }
-            
+
             $table.addEventListener("click", function( event ){
                var $target = event.target;
                if ("td" != $target.tagName.toLowerCase()) return;
                if ($selectedRealm)
-                  ClassName.remove($selectedRealm, "selected-realm");
+                  $selectedRealm.classList.remove("selected-realm");
                var $tr = $target.parentNode;
-               ClassName.add($tr, "selected-realm");
+               $tr.classList.add("selected-realm");
                $selectedRealm = $tr;
                selectedRealmId = $tr.firstChild.textContent * 1;
-               ClassName[selectedRealmId == currentRealmId ?
-                  "add" : "remove"]($ok, "disabled");
+               $ok.classList[selectedRealmId == currentRealmId ?
+                  "add" : "remove"]("disabled");
             }, false);
-            
+
             $div = document.createElement("div");
-            ClassName.add($div, "limited-height");
+            $div.classList.add("limited-height");
             $div.appendChild($table);
             contents.push($div);
-            
-            var $ok = document.createElement("a");
-            ClassName.add($ok, "button disabled");
-            $ok.textContent = "Ok";
-            $ok.title = "Valider le changement de royaume"
-            
-            $ok.addEventListener("click", function( ){
-               if (ClassName.has(this, "disabled")) return;
-               w.wait();
-               var realmId = $selectedRealm.firstChild.textContent;
-               Ajax.signedPost({
-                  url: Ajax.vars.serverUrl +
-                     "/platforms/kabam/change_realm/" + realmId,
-                  responseType: "json",
-                  onerror: function( message ){
-                     w.error("Erreur", message, function( ){
-                        w.close();
-                     });
-                  },
-                  onload: function( response ){
-                     var wiseUrl = response.response.realmwiseurl;
-                     if (!wiseUrl) {
-                        w.error("Erreur",
-                           "Je n’ai pas obtenu l’adresse du royaume",
-                           function( ){ w.close(); });
-                        return;
-                     }
-                     Ajax.signedPost({
-                        url: wiseUrl,
-                        responseType: "json",
-                        onload: function( wiseResponse ){
-                           if (wiseResponse.response.success) {
-                              top.location.href = Ajax.vars.appPath;
-                           } else {
-                              w.error("Erreur",
-                                 "Je ne peux pas joindre le nouveau " + 
-                                    "royaume",
-                                 function( ){ w.close(); });
-                           }
+
+            var $ok = createButton("Ok", {
+               className: "disabled",
+               title: "Valider le changement de royaume",
+               onclick: function( ){
+                  if (this.classList.contains("disabled")) return;
+                  w.wait();
+                  var realmId = $selectedRealm.firstChild.textContent;
+                  Ajax.signedPost({
+                     url: Ajax.vars.serverUrl +
+                        "/platforms/kabam/change_realm/" + realmId,
+                     responseType: "json",
+                     onerror: function( message ){
+                        w.error("Erreur", message, function( ){
+                           w.close();
+                        });
+                     },
+                     onload: function( response ){
+                        var wiseUrl = response.response.realmwiseurl;
+                        if (!wiseUrl) {
+                           w.error("Erreur",
+                              "Je n’ai pas obtenu l’adresse du royaume",
+                              function( ){ w.close(); });
+                           return;
                         }
-                     });
-                  }
-               });
-            }, false);
-            
+                        Ajax.signedPost({
+                           url: wiseUrl,
+                           responseType: "json",
+                           onload: function( wiseResponse ){
+                              if (wiseResponse.response.success) {
+                                 top.location.href = Ajax.vars.appPath;
+                              } else {
+                                 w.error("Erreur",
+                                    "Je ne peux pas joindre le " +
+                                       "nouveau royaume",
+                                    function( ){ w.close(); });
+                              }
+                           }
+                        });
+                     }
+                  });
+               }
+            });
+
             $p = document.createElement("p");
             $p.appendChild($ok);
             contents.push($p);
-            
+
             w.update(contents);
          }
       });
@@ -734,11 +852,180 @@ new Module("Royaume", function( w ){
 });
 
 new Module("Fortuna", function( w ){
-   
    var _prizeInfoCache = {};
-   
+
+   function displayMenu( ){
+      w.wait();
+      GameData.retrieve("player", function( playerData, error ){
+         if (error) {
+            w.error("Je n’ai pas pu charger player.json",
+               error, function( ){ w.close(); });
+            return;
+         }
+
+         var tickets = playerData.tickets;
+         var items = playerData.items;
+         var regular = (tickets.fortunas_chance | 0) +
+            (items.FortunasTicket | 0);
+         var golden = (tickets.gold_club | 0) +
+            (items.FortunasGoldenTicket | 0);
+         var retention = playerData.retention;
+         var contents = [];
+
+         var $h4 = document.createElement("h4");
+         $h4.textContent = "C’est pourri, c’est gratuit";
+         contents.push($h4);
+
+         var $p = document.createElement("p");
+         $p.textContent = "Jour " + retention.length + " sur 7"
+         contents.push($p);
+
+         var $ul = document.createElement("ul");
+         $ul.id = "fortuna-days";
+         var $li;
+         var $previous;
+         var isCounting = false;
+         var hasPlayedThisDay = false;
+         for (var i = 8; --i;) {
+            $li = document.createElement("li");
+            $li.textContent = i;
+            hasPlayedThisDay = retention.indexOf(i) >= 0;
+            isCounting = isCounting || hasPlayedThisDay;
+            var classList = $li.classList;
+            if (hasPlayedThisDay) classList.add("fortuna-played-day");
+            else if (isCounting) classList.add("fortuna-missed-day");
+            if ($previous) $ul.insertBefore($li, $previous);
+            else $ul.appendChild($li);
+            $previous = $li;
+         }
+         contents.push($ul);
+
+         if (regular || golden) {
+            $ul = document.createElement("ul");
+            $ul.classList.add("button-list");
+            contents.push($ul);
+         } else {
+            $p = document.createElement("p");
+            $p.textContent = "Plus rien, attendez demain…";
+            contents.push($p);
+         }
+
+         var s;
+         var $button;
+         if (regular) {
+            s = regular > 1 ? "s" : "";
+            $button = createButton(
+               regular + " ticket" + s + " simple" + s,
+               { onclick: requestGrid }
+            );
+            $button.setAttribute("data-ticket-type", "regular");
+            $li = document.createElement("li");
+            $li.appendChild($button);
+            $ul.appendChild($li);
+         }
+
+         if (golden) {
+            s = golden > 1 ? "s" : "";
+            $button = createButton( golden + " médaillon" + s, {
+               onclick: requestGrid
+            });
+            $button.setAttribute("data-ticket-type", "golden");
+            $li = document.createElement("li");
+            $li.appendChild($button);
+            $ul.appendChild($li);
+         }
+
+         w.update(contents);
+      });
+   }
+
+   function requestGrid( e, ticketType ){
+      ticketType = ticketType || e.target.dataset.ticketType;
+      w.wait();
+
+      Ajax.getJson({
+         url: Ajax.vars.apiServer + "/minigames/index.json",
+         parameters: { ticket_type: ticketType },
+         onload: function( r ){
+            var json = r.response;
+            var timestamp = json.timestamp | 0;
+            var prizeList = json.result.prize_list;
+
+            var $heading = document.createElement("h4");
+            $heading.textContent = "regular" == ticketType ?
+               "Chance de Fortuna" : "Salle des coffres";
+
+            var $table = document.createElement("table");
+            $table.id = "fortuna-table";
+            var $row;
+            var $cell;
+            var $img;
+            var $span;
+            var weightSum = 0;
+            for (var i = 0, prize; prize = prizeList[i]; i++) {
+               if (!(i % 3)) $row = $table.insertRow(-1);
+               $cell = $row.insertCell(-1);
+
+               // TODO weight and weightSum will help to calculate the
+               // probability of getting the object(s) the user has
+               // beforehand designated
+               var weight = prize.weight;
+               $cell.setAttribute("data-weight", weight);
+               weightSum += weight;
+
+               var type = prize.type;
+               $img = document.createElement("img");
+               $img.width = 228;
+               $img.height = 152;
+
+               $span = document.createElement("span");
+               $span.textContent = $img.alt;
+
+               var $div = document.createElement("div");
+               $div.appendChild($img);
+               $div.appendChild($span);
+               $cell.appendChild($div);
+               setupPrizeInfo(type, $img, $span);
+            }
+
+            var $ok = createButton("Ok", {
+               title: "Obtenir un article au hasard dans cette grille",
+               onclick: function( ){
+                  pick(ticketType, timestamp);
+               }
+            });
+            var $change = createButton("Changer", {
+               title: "Demander une nouvelle grille",
+               onclick: function( ){
+                  requestGrid(null, ticketType);
+               }
+            });
+            var $cancel = createButton("Annuler", {
+               title: "Fermer cette fenêtre",
+               onclick: function( ){
+                  w.close();
+               }
+            });
+
+            var $ul = document.createElement("ul");
+            $ul.classList.add("button-list");
+            var $okLi = document.createElement("li");
+            $ul.appendChild($okLi);
+            $okLi.appendChild($ok);
+            var $changeLi = document.createElement("li");
+            $ul.appendChild($changeLi);
+            $changeLi.appendChild($change);
+            var $cancelLi = document.createElement("li");
+            $ul.appendChild($cancelLi);
+            $cancelLi.appendChild($cancel);
+
+            w.update([$heading, $table, $ul]);
+         }
+      });
+   }
+
    function setupPrizeInfo( prize, $img, $span ){
-   
+
       // handle prize texts
       // I added a cache layer because the xml is huge
       if (prize in _prizeInfoCache) {
@@ -752,55 +1039,64 @@ new Module("Fortuna", function( w ){
       } else {
          $img.alt = prize;
          $span.textContent = prize;
-         
+
          GameData.retrieve("langFr", function( data, error ){
             if (error) {
                w.error("Erreur pas trop grave",
                   "Je n'ai pas pu charger le fichier de langue, " +
-                  "les objets seront affichés avec leurs codes.\n" +
+                  "les objets seront affichés sans traduction.\n" +
                   "(raison\xA0:\n" + error + ")");
+               debug(error);
                return;
             }
-            
+
+            // basic XML regexp: ranges include blank characters and
+            // all printable ASCII characters (\x20 to \x7E) except
+            // `<` (\x3C) and `>` (\x3E) (`=` is \x3D).
+            var range = "[\\s\x20-\x3B=\x3F-\x7E]";
             var regexp = new RegExp("<(" + prize.toLowerCase() + ")>\\s*" +
-               "(?:<name>([\\x20-\\x7E\\s]*?)</name>\\s*)?" +
-               "(?:<description>([\\x20-\\x7E\\s]*?)</description>\\s*)?" +
-               "(?:<name>([\\x20-\\x7E\\s]*?)</name>\\s*)?" +
+               "(?:<name>(" + range + "*?)</name>\\s*)?" +
+               "(?:<description>(" + range + "*?)</description>\\s*)?" +
+               "(?:<name>(" + range + "*?)</name>\\s*)?" +
                "</\\1>");
             var match = data.match(regexp);
             var decoded = match && match.map(function( m ) m ?
                m.replace(/&#(\d+);/g, function( _, d )
                   eval("'\\x" + parseInt(d).toString(16) + "'")) :
                "");
-            
+
             if (decoded) {
                var name = decoded[2] || decoded[4];
                var description = decoded[3] || "";
             } else {
-               debug(prize);
                _prizeInfoCache[prize] = {
                   name       : prize,
                   description: ""
                };
                return;
             }
-            
+
             $img.alt = name;
             $span.textContent = name;
             $img.longdesc = description;
             $img.title = description;
             $span.title = description;
-            
+
             _prizeInfoCache[prize] = {
                name       : name,
                description: description
             };
          });
       }
-      
-      // handle images
+
+      // handles images
+      $img.onerror = function( ){
+         debug(prize, this.src);
+      };
+
       var isResource = false;
       var isTroop = false;
+      var isStack = false;
       var isChest = false;
       var isGold = false;
       var isEgg = false;
@@ -809,17 +1105,17 @@ new Module("Fortuna", function( w ){
       var src;
       var dir;
       var chestName;
-      
+
       chunks.forEach(function( chunk ){
          if (    "K" == chunk) isResource = true;
          if ("Troop" == chunk) isTroop = true;
-         if ("Stack" == chunk) isTroop = false;
+         if ("Stack" == chunk) isStack = true;
          if ("Chest" == chunk) isChest = true;
          if ( "Gold" == chunk) isGold = true;
          if (  "Egg" == chunk) isEgg = true;
          if (   !isNaN(chunk)) num = chunk;
       });
-      if (isTroop) {
+      if (isTroop && !isStack) {
          dir = "troops/";
          src = chunks.slice(0, chunks.indexOf(num)).join("");
       } else {
@@ -828,270 +1124,492 @@ new Module("Fortuna", function( w ){
             if (isGold) src = "gold";
             else        src = chunks[0].toLowerCase();
          } else if (isChest) {
+            dir = "";
             chestName = "configurablechest" + num;
-            src = "configurablechest";
+            src = "item/configurablechest"; // default image
             GameData.retrieve("chests", function( data, error ){
                if (error) {
                   w.error("Erreur pas trop grave",
-                     "Je n'ai pas pu charger les images de coffres, " +
+                     "Je n'ai pas pu charger les images des coffres, " +
                      "ils auront tous l’image par défaut.\n" +
                      "(raison\xA0:\n" + error + ")");
                   return;
                }
-               if (prize in data) setTimeout(function( ){
-                  $img.src = Ajax.vars.s3Server + "/flash/assets/" +
-                     dir + data[prize];
-               }, 0);
-            });   
+               if (prize in data) {
+                  src = data[prize].replace(/\.jpg$/, "");
+                  // immediately updates $img.src in case “chest” data
+                  // are already in memory
+                  $img.src = Ajax.vars.assetsServer +
+                     "/flash/assets/" + dir + src + ".jpg";
+               }
+            });
          } else if (isEgg) {
             var eggType = chunks[1].toLowerCase();
             if ("mephitic" == eggType) eggType = "swamp";
             if (   "helio" == eggType) eggType = "desert";
+            if ("dragon" == eggType) eggType = chunks[0].toLowerCase();
             src = eggType + "dragonegg";
+         } else if (isStack) {
+            src = chunks.slice(0, chunks.indexOf("Stack"))
+               .join("").toLowerCase();
          } else {
             src = chunks.join("").toLowerCase();
          }
       }
-      $img.onerror = function( ){
-         debug(prize, this.src);
-      };
-      $img.src = Ajax.vars.s3Server +
+      $img.src = Ajax.vars.assetsServer +
          "/flash/assets/" + dir + src + ".jpg";
    }
 
-   function requestList( e, ticketType ){
-      ticketType = ticketType || e.target.dataset.ticketType;
+   function pick( ticketType, timestamp ){
       w.wait();
-      
-      Ajax.getJson({
-         url: Ajax.vars.apiServer + "/minigames/index.json",
-         parameters: { ticket_type: ticketType },
+      Ajax.signedPost({
+         url: Ajax.vars.apiServer +
+            "/minigames/save_result.json",
+         responseType: "json",
+         parameters: {
+            ticket_type: ticketType,
+            minigame_timestamp: timestamp
+         },
+         onerror: function( r ){
+            debug(r);
+            w.error("Erreur de connexion", "", function( ){
+               displayMenu();
+            });
+
+         },
          onload: function( r ){
-            var json = r.response;
-            var timestamp = json.timestamp | 0;
-            var prizeList = json.result.prize_list;
-            
-            var $heading = document.createElement("h4");
-            $heading.textContent = "regular" == ticketType ?
-               "Chance de Fortuna" : "Salle des coffres"; // i18n
-            
-            var $table = document.createElement("table");
-            $table.id = "fortuna-table";
-            var $row;
-            var $cell;
-            var $img;
-            var $span;
-            var weightSum = 0;
-            for (var i = 0, prize; prize = prizeList[i]; i++) {
-               if (!(i % 3)) $row = $table.insertRow(-1);
-               $cell = $row.insertCell(-1);
-               
-               /* TODO weight et weightSum serviront à calculer la
-               probabilité d'obtenir le(s) objet(s) préalablement
-               désignés par le joueur */
-               var weight = prize.weight;
-               $cell.setAttribute("data-weight", weight);
-               weightSum += weight;
-               
-               var type = prize.type;
-               $img = document.createElement("img");
-               $img.width = 228;
-               $img.height = 152;
-               
-               $span = document.createElement("span");
-               $span.textContent = $img.alt;
-               
-               var $div = document.createElement("div");
-               $div.appendChild($img);
-               $div.appendChild($span);
-               $cell.appendChild($div);
-               setupPrizeInfo(type, $img, $span);
-            }
-            
-            var $ok = document.createElement("a");
-            ClassName.add($ok, "button");
-            $ok.textContent = "Ok";
-            $ok.title = "Je tente, me file pas de la merde cette fois…";
-            $ok.addEventListener("click", function( ){
-               w.wait();
-               Ajax.signedPost({
-                  url: Ajax.vars.apiServer +
-                     "/minigames/save_result.json",
-                  responseType: "json",
-                  parameters: {
-                     ticket_type: ticketType,
-                     minigame_timestamp: timestamp
-                  },
-                  onload: function( r ){
-                     var $h4 = document.createElement("h4");
-                     $h4.textContent = "Vous avez gagné\xA0:";
-                     
-                     var $img = document.createElement("img");
-                     var result = r.response.result;
-                     if (!result.success) {
-                        w.error("Échec", result.reason, function( ){
-                           displayMenu();
-                        });
-                        return;
-                     }
-                     GameData.update("player");
-                     
-                     var prizeType = result.item_won.type;
-                     
-                     var $span = document.createElement("span");
-                     setupPrizeInfo(prizeType, $img, $span);
-                     
-                     var $p = document.createElement("p");
-                     $p.id = "fortuna-prize";
-                     $p.appendChild($img);
-                     $p.appendChild($span);
-                     
-                     var $button = document.createElement("a");
-                     ClassName.add($button, "button");
-                     $button.textContent = "Continuer";
-                     $button.addEventListener(
-                        "click", displayMenu, false);
-                     var $okP = document.createElement("p");
-                     $okP.appendChild($button);
-                     
-                     w.update([$h4, $p, $okP]);
-                  }
+            var result = r.response.result;
+            if (!result.success) {
+               w.error("Erreur du serveur", result.reason, function( ){
+                  displayMenu();
                });
+               return;
+            }
+
+            GameData.update("player");
+
+            var prizeType = result.item_won.type;
+
+            var $img = document.createElement("img");
+            var $span = document.createElement("span");
+            setupPrizeInfo(prizeType, $img, $span);
+
+            var $h4 = document.createElement("h4");
+            $h4.textContent = "Vous avez gagné\xA0:";
+
+            var $p = document.createElement("p");
+            $p.id = "fortuna-prize";
+            $p.appendChild($img);
+            $p.appendChild($span);
+
+            var $okP = document.createElement("p");
+            var $button = createButton("Continuer", {
+               onclick: displayMenu
             });
-            
-            var $change = document.createElement("a");
-            ClassName.add($change, "button");
-            $change.textContent = "Changer";
-            $change.title = "C’est de la daube, sers-moi autre chose";
-            $change.addEventListener("click", function( ){
-               requestList(null, ticketType);
-            });
-            
-            var $cancel = document.createElement("a");
-            ClassName.add($cancel, "button");
-            $cancel.textContent = "Annuler";
-            $cancel.title = "Ça me saoûle, je laisse tomber";
-            $cancel.addEventListener("click", function( ){
-               w.close();
-            });
-            
-            var $ul = document.createElement("ul");
-            ClassName.add($ul, "button-list");
-            var $okLi = document.createElement("li");
-            $ul.appendChild($okLi);
-            $okLi.appendChild($ok);
-            var $changeLi = document.createElement("li");
-            $ul.appendChild($changeLi);
-            $changeLi.appendChild($change);
-            var $cancelLi = document.createElement("li");
-            $ul.appendChild($cancelLi);
-            $cancelLi.appendChild($cancel);
-            
-            w.update([$heading, $table, $ul]);
+            $okP.appendChild($button);
+
+            w.update([$h4, $p, $okP]);
          }
       });
    }
-   
-   function displayMenu( ){
-      w.wait();
-      GameData.retrieve("player", function( playerData, error ){
-         if (error) {
-            w.error("Je n’ai pas pu charger player.json",
-               error, function( ){ w.close(); });
-            return;
-         }
-         
-         var tickets = playerData.tickets;
-         var items = playerData.items;
-         var regular = (tickets.fortunas_chance | 0) +
-            (items.FortunasTicket | 0);
-         var golden = (tickets.gold_club | 0); // + (items.XXX | 0)
-         var retention = playerData.retention;
-         var contents = [];
-         
-         var $h4 = document.createElement("h4");
-         $h4.textContent = "C’est pourri, c’est gratuit";
-         contents.push($h4);
-         
-         var $p = document.createElement("p");
-         $p.textContent = "Jour " + retention.length + " sur 7"
-         contents.push($p);
-         
-         var $ul = document.createElement("ul");
-         $ul.id = "fortuna-days";
-         var $li;
-         var $previous;
-         var isCounting = false;
-         var hasPlayedThisDay = false;
-         for (var i = 8; --i;) {
-            $li = document.createElement("li");
-            $li.textContent = i;
-            hasPlayedThisDay = retention.indexOf(i) >= 0;
-            isCounting = isCounting || hasPlayedThisDay;
-            ClassName.add($li, hasPlayedThisDay ?
-               "fortuna-played-day" : isCounting ?
-                  "fortuna-missed-day" : "");
-            if ($previous) $ul.insertBefore($li, $previous);
-            else $ul.appendChild($li);
-            $previous = $li;
-         }
-         contents.push($ul);
-         
-         if (regular || golden) {
-            $ul = document.createElement("ul");
-            ClassName.add($ul, "button-list");
-            contents.push($ul);
-         } else {
-            $p = document.createElement("p");
-            $p.textContent = "Plus rien, attendez demain…";
-            contents.push($p);
-         }
-         
-         var s;
-         var $button;
-         if (regular) {
-            $button = document.createElement("a");
-            ClassName.add($button, "button");
-            s = regular > 1 ? "s" : "";
-            $button.textContent =
-               regular + " ticket" + s + " simple" + s;
-            $button.setAttribute("data-ticket-type", "regular");
-            $button.addEventListener("click", requestList, false);
-            $li = document.createElement("li");
-            $li.appendChild($button);
-            $ul.appendChild($li);
-         }
-         
-         if (golden) {
-            $button = document.createElement("a");
-            ClassName.add($button, "button");
-            s = golden > 1 ? "s" : "";
-            $button.textContent = golden + " médaillon" + s;
-            $button.setAttribute("data-ticket-type", "golden");
-            $button.addEventListener("click", requestList, false);
-            $li = document.createElement("li");
-            $li.appendChild($button);
-            $ul.appendChild($li);
-         }
-            
-         w.update(contents);
-      });
-   }
+
    displayMenu();
 });
 
-// [@DAT] Données de jeu ///////////////////////////////////////////////
+new Module("Map", function( w ){
+   w.wait();
+
+   var MAP_WIDTH = 750;
+   var MAP_HEIGHT = 750;
+   var MAP_HEADER_LENGTH = 2;
+   var MAP_TYPES = [
+      "CAPITAL_CITY",    // 0
+      "PLAIN",           // 1
+      "MOUNTAIN",        // 2
+      "FOREST",          // 3
+      "HILL",            // 4
+      "GRASSLAND",       // 5
+      "LAKE",            // 6
+      "BOG",             // 7
+      "ANTHROPUSCAMP",   // 8
+      "FOG"              // 9
+   ];
+
+   var SPRITE_WIDTH = 150; // pixels
+   var SPRITE_HEIGHT = 100;
+
+   var CANVAS_WIDTH = 400;
+   var CANVAS_HEIGHT = 300;
+
+   // POST {apiServer}/map.json ? x, y
+   // => json {
+   //    x           : integer
+   //    y           : integer
+   //    map_cities  : [{
+   //       id             player id
+   //       name           player name
+   //       race           player race
+   //       level          player level
+   //       might          player might
+   //       alliance_name  player alliance
+   //       map_player_id  city id?
+   //       x              position x
+   //       y              position y
+   //       type           city/outpost type
+   //       healing        whether outpost is healing or not
+   //    }, …]
+   // }
+
+   // no need to synchronise sprite sheet loading since it's local
+   var $spriteSheet = new Image();
+   $spriteSheet.src = GM_getResourceURL("terrains");
+
+   // needs "map" for static map data and "player" for inital position
+   // and owned wildernesses
+   GameData.retrieveMulti(["map", "player"], function( data, errors ){
+      debug(data);
+      var map = data.map;
+      var player = data.player;
+      var err;
+      if (!map) {
+         err = errors.map;
+         w.error("Map Data Error: " + err.name,
+            err.message + " " + err.fileName + ":" + err.lineNumber,
+            function( ){ w.close(); });
+      } else if (!player) {
+         err = errors.player;
+         w.error("Player Data Error: " + err.name,
+            err.message + " " + err.fileName + ":" + err.lineNumber,
+            function( ){ w.close(); });
+      }
+
+      var $form = document.createElement("form");
+
+      var $h4 = document.createElement("h4");
+      $h4.textContent = "Coordonnées…";
+      $form.appendChild($h4);
+
+      var $p = document.createElement("p");
+      $form.appendChild($p);
+
+      var $label = document.createElement("label");
+      $label.textContent = "x ";
+      $p.appendChild($label);
+
+      var $xInput = document.createElement("input");
+      $xInput.type = "number";
+      $xInput.min = 0;
+      $xInput.max = MAP_WIDTH;
+      $xInput.step = 1;
+      $xInput.size = 3;
+      $xInput.value = player.cities.capital.x;
+      $label.appendChild($xInput);
+
+      $p.appendChild(document.createTextNode(" / "));
+
+      $label = document.createElement("label");
+      $label.textContent = "y ";
+      $p.appendChild($label);
+
+      var $yInput = $xInput.cloneNode();
+      $yInput.max = MAP_HEIGHT;
+      $yInput.value = player.cities.capital.y;
+      $label.appendChild($yInput);
+
+      $label = document.createElement("label");
+      $label.textContent = "zoom ";
+
+      var $zoomInput = $xInput.cloneNode();
+      $zoomInput.max = 1;
+      $zoomInput.size = 4;
+      $zoomInput.step = 0.05;
+      $zoomInput.value = 1;
+      $label.appendChild($zoomInput);
+
+      $p = document.createElement("p");
+      $p.appendChild($label);
+      $form.appendChild($p);
+      
+      $h4 = document.createElement("h4");
+      $h4.textContent = "Override";
+      $form.appendChild($h4);
+      
+      $p = document.createElement("p");
+      $form.appendChild($p);
+      
+      var $nInput = $xInput.cloneNode();
+      $nInput.max = 9;
+      $nInput.size = 1;
+      $nInput.value = 1;
+      $label = document.createElement("label");
+      $label.textContent = "n ";
+      $label.appendChild($nInput);
+      $p.appendChild($label);
+      
+      var $mInput = $xInput.cloneNode();
+      $mInput.max = 20;
+      $mInput.size = 2;
+      $mInput.value = 1;
+      $label.appendChild($mInput);
+      $label = document.createElement("label");
+      $label.textContent = " m ";
+      $label.appendChild($mInput);
+      $p.appendChild($label);
+
+      var $submit = document.createElement("input");
+      $submit.type = "submit";
+      $submit.classList.add("button");
+      $submit.value = "Voir";
+
+      $p = document.createElement("p");
+      $p.appendChild($submit);
+      $form.appendChild($p);
+
+      var $canvas = document.createElement("canvas");
+      $canvas.width = CANVAS_WIDTH;
+      $canvas.height = CANVAS_HEIGHT;
+      var buffer = new Uint8Array(map);
+
+      /**
+       * Calculates the offset x, y pixel values within the sprite sheet
+       * to display the terrain located at the (u, v) coordinates.
+       * @param u       
+       * @param v       
+       */
+      function calculateSpriteOffset( u, v ){
+         var byte = buffer[MAP_HEADER_LENGTH + MAP_HEIGHT * u + v];
+         var type = byte >> 4 % 16;
+         var level = byte % 16;
+         var spriteLevel = 10 == level ? 2 :
+            Math.floor((level - 1) / 3);
+         return {
+            x: SPRITE_WIDTH * (type - 1), // - 1 because 0 = city
+            y: SPRITE_HEIGHT * spriteLevel
+         };
+      }
+   
+      /**
+       * Draws a region of the map around the given (u, v) point
+       * into a canvas.
+       * @param cx   the canvas' 2d context
+       * @param uO   map x coordinate of the center tile
+       * @param vO   map y coordinate of the center tile
+       * @param p    zoom percentage
+       */
+      function drawRegion( cx, uO, vO, p ){
+         // aliases for shorter formulae
+         var W = CANVAS_WIDTH;
+         var H = CANVAS_HEIGHT;
+         var w = SPRITE_WIDTH;
+         var h = SPRITE_HEIGHT;
+         
+         cx.clearRect(0, 0, W, H);
+
+         var n = Math.ceil(W / (2 * w * p));
+         var m = Math.ceil(H / (2 * h * p));
+
+         // debug("n =", n, ", m =", m);
+
+         // OVERRIDE
+         n = $nInput.value | 0;
+         m = $mInput.value | 0;
+         
+         
+         var x; // sprite x on the canvas
+         var y; // sprite y on the canvas
+         var u; // sprite x on the map
+         var v; // sprite y on the map
+         
+         // centered axis
+         cx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+         cx.lineWidth = 1;
+         cx.beginPath();
+         cx.moveTo(0, H/2 + 0.5);
+         cx.lineTo(W, H/2 + 0.5);
+         cx.moveTo(W/2 + 0.5, 0);
+         cx.lineTo(W/2 + 0.5, H);
+         cx.stroke();
+         
+         for (var i = -n; i <= +n; i++) {
+            for (var j = -m; j <= +m; j++) {
+               u = (uO + i) % MAP_WIDTH;
+               if (u < 0) u += MAP_WIDTH;
+               v = (vO + j) % MAP_HEIGHT;
+               if (v < 0) v += MAP_HEIGHT;
+               var so = calculateSpriteOffset(u, v);
+               x = w * p * (i + j) / 2 + (W - w * p) / 2;
+               y = h * p * (i - j) / 2 + (H - h * p) / 2;
+               
+               cx.drawImage($spriteSheet,
+                  so.x, so.y,
+                  w, h,
+                  x, y,
+                  w * p, h * p);
+
+               // void drawImage(
+               //   in nsIDOMElement image,  source image
+               //   in float sx,             source top left x
+               //   in float sy,             source top left y
+               //   in float sw,             source width   (clipping)
+               //   in float sh,             source height  (clipping)
+               //   in float dx,             destination x
+               //   in float dy,             destination y
+               //   in float dw,             destination width  (scaling)
+               //   in float dh              destination height (scaling)
+               // );
+               
+            }
+         }
+      }
+      
+      function draw( ){
+         if (!$canvas.parentNode) {
+            $form.appendChild($canvas);
+            w.center();
+         }
+         drawRegion(
+            $canvas.getContext("2d"),
+            parseInt($xInput.value, 10) | 0,
+            parseInt($yInput.value, 10) | 0,
+            parseFloat($zoomInput.value) || 1
+         );
+      }
+
+      $form.addEventListener("submit", function( event ){
+         event.preventDefault();
+         draw();
+      });
+      
+      $canvas.onwheel = function( event ){
+         event.preventDefault();
+         var p = ($zoomInput.value = parseFloat($zoomInput.value) || 1)
+         // multiplies by 100 to avoid floating point deviations
+         p = Math.round(p * 100);
+         if (event.deltaY > 0) {
+            p = Math.max(25, p - 5);
+         } else if (event.deltaY < 0) {
+            p = Math.min(200, p + 5);
+         }
+         $zoomInput.value = p / 100;
+         draw();
+      };
+
+      // Ajax.signedPost({
+      //  url: Ajax.vars.apiServer + "/map.json",
+      //  responseType: "json",
+      //  parameters: {
+      //     x: x,
+      //     y: y,
+      //     width: width,
+      //     height: height
+      //  },
+      //  onload: function( response ){
+      //     // TODO
+      //     debug(response);
+      //  },
+      //  onerror: function( error ){
+      //     debug(error.relatedData);
+      //     w.error("Oups", error, function( ){ w.close(); });
+      //  }
+      // });
+
+      w.update($form);
+   });
+});
+
+new Module("Trainings", function( w ){
+   w.$window.id = "trainings";
+   w.wait();
+
+   Ajax.getJson({
+      url: Ajax.vars.apiServer + "/player/jobs.json",
+      onload: function( r ){
+         var earlyResult = r.response.result;
+         if (!earlyResult.success) {
+            w.error("Erreur",
+               "Le serveur n'a pas renvoyé de résultat.",
+               function( ){ w.close(); });
+            return;
+         }
+         if ("false" === earlyResult.success) {
+            w.error("Erreur du serveur",
+               earlyResult.reason || "Pas d'explication…",
+               function( ){ w.close(); });
+            return;
+         }
+
+         var cities = earlyResult.result;
+         var contents = [];
+         var total = {};
+         var $table = document.createElement("table");
+         for (let cityName in cities) {
+            let $tbody;
+            let $cityFirstRow;
+            let cityRowCount = 0;
+            cities[cityName].forEach(function( job ){
+               if ("units" !== job.queue) return;
+
+               if (!$tbody) {
+                  $tbody = document.createElement("tbody");
+                  $table.appendChild($tbody);
+               }
+
+               var unit = job.unit_type;
+               var quantity = job.quantity;
+               var $row = $tbody.insertRow(-1);
+               if (!$cityFirstRow) $cityFirstRow = $row;
+               $row.insertCell(-1).textContent = unit;
+               $row.insertCell(-1).textContent = quantity;
+               $row.insertCell(-1).textContent =
+                  new Date(job.run_at * 1e3).toShortFormat();
+               $row.insertCell(-1).textContent =
+                  job.duration.toTimeInterval();
+
+               cityRowCount++;
+               total[unit] = (total[unit] || 0) + quantity;
+            });
+            if ($tbody) {
+               let $cityNameCell = document.createElement("th");
+               $cityNameCell.textContent = cityName;
+               $cityNameCell.rowSpan = cityRowCount;
+               $cityFirstRow.insertBefore($cityNameCell,
+                  $cityFirstRow.firstChild);
+            }
+         }
+         if ($table) {
+            let $headRow = $table.createTHead().insertRow(-1);
+            $headRow.insertCell(-1).textContent = "Lieu";
+            $headRow.insertCell(-1).textContent = "Unité";
+            $headRow.insertCell(-1).textContent = "Quantité";
+            $headRow.insertCell(-1).textContent = "Fin prévue";
+            $headRow.insertCell(-1).textContent = "Durée";
+            // let $h4 = document.createElement("h4");
+            // $h4.textContent = cityName;
+            // contents.push($h4);
+            contents.push($table);
+         }
+
+         var $pre = document.createElement("pre");
+         $pre.textContent = JSON.stringify(total);
+         contents.push($pre);
+
+         w.update(contents);
+      }
+   });
+});
+
+// [@DAT] Game Data ////////////////////////////////////////////////////
 
 var GameData = (function( ){
    var _cache = {};
-   
+
    var _keys = {
       player: {
          url: "{apiServer}/player.json",
          loadMethod: "getJson"
       },
       chests: {
-         url: "{s3Server}/flash/assets/item/thumbnails.json?b={lazyLoadedSwfCachebreaker}",
+         url: "{assetsServer}/flash/assets/item/thumbnails.json?b={lazyLoadedSwfCachebreaker}",
          loadMethod: "getJson"
       },
       manifest: {
@@ -1099,7 +1617,7 @@ var GameData = (function( ){
          loadMethod: "getJson"
       },
       map: {
-         url: "{s3Server}{s3SwfPrefix}/map.bin?b={mapBinCacheBreaker}",
+         url: "{assetsServer}{assetsPrefix}/map.bin?b={mapBinCachebreaker}",
          loadMethod: "getBinary"
       },
       langFr: {
@@ -1107,59 +1625,56 @@ var GameData = (function( ){
          loadMethod: "getXml"
       }
    };
-   
+
    return {
       retrieve: function retrieve( key, callback ){
          if (key in _cache) {
-            
             if (callback) callback(_cache[key]);
-            
-         } else {
-         
-            var handler = _keys[key];
-            if (!handler.pendingRequests) handler.pendingRequests = [];
-            if (!handler.pendingRequests.length) {
-               Ajax[handler.loadMethod](Object.extend(handler.options, {
-                  url: handler.url.replace(/\{([^\}]+)\}/g,
-                     function( _, varName ) Ajax.vars[varName]),
-                     
-                  onload: function( response ){
-                     var data = response.response;
-                     _cache[key] = data;
-                     window.dispatchEvent(
-                        new CustomEvent(key + "Loaded", {
-                           bubbles: false,
-                           cancelable: false,
-                           detail: { data: data }
-                        }));
-                     var request;
-                     while (request = handler.pendingRequests.pop())
-                        request(data);
-                  },
-                  
-                  onerror: function( error ){
-                     var request;
-                     while (request = handler.pendingRequests.pop())
-                        request(null, error);
-                  }
-               }));
-            }
-            handler.pendingRequests.push(callback);
+            return;
          }
+
+         var handler = _keys[key];
+         if (!handler.pendingRequests) handler.pendingRequests = [];
+         if (!handler.pendingRequests.length) {
+            Ajax[handler.loadMethod](Object.extend(handler.options, {
+               url: handler.url.replace(/\{([^\}]+)\}/g,
+                  function( _, varName ) Ajax.vars[varName]),
+
+               onload: function( response ){
+                  var data = response.response;
+                  _cache[key] = data;
+                  expose(data, key);
+                  window.dispatchEvent(
+                     new CustomEvent(key + "Loaded", {
+                        bubbles: false,
+                        cancelable: false,
+                        detail: { data: data }
+                     }));
+                  var request;
+                  while (request = handler.pendingRequests.pop())
+                     request(data);
+               },
+
+               onerror: function( error ){
+                  var request;
+                  while (request = handler.pendingRequests.pop())
+                     request(null, error);
+               }
+            }));
+         }
+         handler.pendingRequests.push(callback);
       },
-      
+
       retrieveMulti: function retrieveMulti( keys, callback ){
          var requirementsCount = keys.length;
-         var multiError = {};
          var multiData = {};
-         
+         var multiError = {};
+
          function decreaseAndCheck( ){
-            if (!--requirementsCount)
-               callback(multiData, multiError);
+            if (!--requirementsCount) callback(multiData, multiError);
          }
-         
+
          keys.forEach(function( key ){
-            if (GameData.isLoaded(key)) decreaseAndCheck();
             GameData.retrieve(key, function( data, error ){
                multiData[key] = data;
                multiError[key] = error;
@@ -1167,7 +1682,7 @@ var GameData = (function( ){
             });
          });
       },
-      
+
       update: function update( key, newData ){
          if (!newData) {
             delete _cache[key];
@@ -1178,56 +1693,58 @@ var GameData = (function( ){
          if (!data) return;
          for (var name in newData) data[name] = newData[name];
       },
-      
+
       isLoaded: function isLoaded( key ){
          return key in _cache;
       }
    };
 }());
 
-// [@INI] Initialisation du script /////////////////////////////////////
+// [@INI] Script Initialization ////////////////////////////////////////
 
-// initialise l'objet flash, oui, celui qui ne devrait plus exister...
-// n'appeler cette fonction qu'après qu'Ajax.vars ait été peuplé
+// initializes the flash object--yes, the one that shoudn't exist
+// anymore… Only call this function after `Ajax.vars` has been populated
 function initSwf( $swf ){
    var $flashvars = $swf.querySelector("param[name=flashvars]");
-   
+
    var overrideVars = {
       width: window.innerWidth,
       height: window.innerHeight,
-      paymentExtra: "sblarff:" // protocole inexistant
+      paymentExtra: "sblarff:" // nonexistent protocol
+      // note: set `paymentExtra` to "javascript:" to see interesting
+      // bugs ^_^
    };
-   for (var v in overrideVars)
-      Ajax.vars[v] = overrideVars[v];
-   
+   for (var v in overrideVars) Ajax.vars[v] = overrideVars[v];
+
+   // filters the vars before passing them in as flashvars
    [
-      // serveurs api et contenu
+      // API and content servers
       "api_server",
       "s3_server",
       "s3_swf_prefix",
-      
-      // identifiants joueur
+
+      // player identifiers
       "session_id",
       "user_id",
       "dragon_heart",
-      
-      // langue
+
+      // lang
       "locale",
-      
-      // réseaux sociaux
+
+      // social networks
       "facebook_id",
       "viral",
-      
-      // paramètres visuels
+
+      // visual parameters
       "width",
       "height",
       "canvas_bgcolor",
-      
+
       // chat
       "pub_server",
       "pub_port",
       "user_time",
-      
+
       // cachebreakers
       "primary_ui_cachebreaker",
       "secondary_ui_cachebreaker",
@@ -1236,18 +1753,18 @@ function initSwf( $swf ){
       "client_cachebreaker",
       "lazy_loaded_swf_cachebreaker",
       "map_bin_cachebreaker",
-      
-      // cdn
+
+      // CDN
       "mode_is_cdn",
       "preloader_url",
       "ruby_store_url",
       "assets_server",
       "assets_prefix",
       "statics_server",
-      
-      // publicité
+
+      // advertising
       "payment_extra",
-      
+
       // ?
       "platform",
       "subnetwork",
@@ -1259,11 +1776,11 @@ function initSwf( $swf ){
    });
    var v = $flashvars.value;
    $flashvars.value = v.substr(0, v.length - 1);
-      
+
    if (Ajax.vars.modeIsCdn) {
       $swf.data = Ajax.vars.preloaderUrl;
    } else {
-      $swf.data = Ajax.vars.s3Server + Ajax.vars.s3SwfPrefix +
+      $swf.data = Ajax.vars.assetsServer + Ajax.vars.assetsPrefix +
          "/preloader.swf?cachebreaker=" +
          Ajax.vars.preloaderCachebreaker;
    }
@@ -1278,38 +1795,43 @@ function injectStyle( style ){
    $receiver.appendChild($style);
 }
 
-switch (location.hostname.match(/(\w+)\.\w+$/)[1]) {
+switch (currentHost) {
 
 case "kabam": ///////////////////////////////////////////////////////
-   
+
    document.title = "HybriDoA";
-   
-   // prévention des scripts : Firefox seulement.
-   // Ce n'est pas vital mais ça économise pas mal de traitement
-   // et de trafic réseau inutile.
+
+   // rejection of marketing cookies
+   document.cookie =
+      "eu_privacy_consent=false; path=/; domain=kabam.com";
+
+   // script prevention: Firefox only. This is not vital but saves
+   // a lot of processing and useless network traffic.
    document.addEventListener("beforescriptexecute", function( e ){
       e.preventDefault();
    });
 
    document.addEventListener("DOMContentLoaded", function( ){
+      stop();
+
       var $body = document.body;
       var $html = document.documentElement;
       var $form = document.getElementById("post_form");
-      
-      // sauvegarde des noeuds DOM
+
+      // DOM nodes saving
       var $saver = document.createElement("div");
       $saver.appendChild($form);
-      
-      // nettoyage du HTML
-      Array.prototype.forEach.call(
+
+      // HTML cleaning
+      Array.forEach(
          $html.querySelectorAll("script, style, link[rel=stylesheet]"),
          function( $ ){ $.parentNode.removeChild($); }
       );
       Attribute.removeAll($html, "lang", "dir");
       $body.innerHTML = "";
       Attribute.removeAll($body);
-      
-      // repeuplement du DOM
+
+      // DOM repopulation
       injectStyle("html, body, iframe {\
          display: block;\
          width: 100%;\
@@ -1323,132 +1845,122 @@ case "kabam": ///////////////////////////////////////////////////////
          opacity: 0;\
          transition: opacity 0.4s ease-in;\
       }");
-      
+
       $body.appendChild($form);
-      
+
       var $iframe = document.createElement("iframe");
       $iframe.src = "#";
       $iframe.width = window.innerWidth;
       $iframe.height = window.innerHeight;
       $iframe.onload = function( ){ this.style.opacity = "1"; };
       $body.appendChild($iframe);
-      
-      // lancement du jeu
+
+      // game launching
       $form.target = $iframe.name = "hybridoa-iframe";
       $form.submit();
-      
+
    });
    break;
 
 case "wonderhill": //////////////////////////////////////////////////
-   // Attenion : expose() ne fonctionne pas ici, car unsafeWindow
-   // renvoie le contexte de l'iframe.
-   
+
    if (FIREFOX) {
-      // annule les scripts et récupère les valeurs de C.attrs.
+      // prevents scripts and retrieves `C.attrs` values
       document.addEventListener("beforescriptexecute", function( e ){
          e.preventDefault();
-         var regexp = /^\s*C\.attrs\.(\w+)\s+=\s*([^;$]+)/gm;
-         //                C .attrs .( 1 )   =   (  2   )
-         var text = e.target.textContent;
-         var match;
-         while (match = regexp.exec(text)) {
-            // le bloc try/catch prévient une erreur à cause des
-            // labels incorrects dans googlePaymentTokens
-            try { Ajax.vars[match[1]] = eval(match[2]); } catch (_) {}
-         }
+         var source = e.target.textContent;
+         if (source.indexOf("C.attrs") >= 0) Ajax.initVars(source);
       }, false);
    }
-   
+
    document.addEventListener("DOMContentLoaded", function( ){
       var $html = document.documentElement;
       var $body = document.body;
-      $body.onload = "";
+      $body.onload   = "";
       $body.onresize = "";
-      
+
       if (!FIREFOX) {
-         // Navigateurs non Firefox : les scripts n'ont pas été annulés
-         // par beforescriptexecute, il va falloir faire un peu de
-         // travail dessus…
-         
-         // V6 est une usine à gaz inutile, on empêche son chargement
+         // Non Firefox browsers: scripts haven't been prevented
+         // by `beforescriptexecute`, we need to work on it…
+
+         // V6 is a Rube Goldberg machine, this prevents its loading
          unsafeWindow.V6.go = function( ){};
-         
-         // redéfinit la fonction platforms_kabam_game_show, qui est
-         // appelée juste après que les variables de C.attrs aient été
-         // initialisées. Ceci permet de récupérer ces variables et de
-         // prévenir du même coup le chargement du Flash.
+
+         // redefines the `platforms_kabam_game_show` function, which is
+         // called just after the `C.attrs` variables have been
+         // populated. This allows to retrieve these variables and at
+         // the same time to prevent the Flash from loading.
          var C = unsafeWindow.C;
          C.views.platforms_kabam_game_show = function( ){
-            var Cattrs = C.attrs;
-            for (var attr in Cattrs)
-               Ajax.vars[attr] = Cattrs[attr];
+            Ajax.initVars(C.attrs);
          };
       }
-      
-      // nettoie le html
+
+      // cleans up the HTML
       Attribute.removeAll($html, "xmlns");
-      $html.lang = "fr";                        // i18n
-      $html.setAttribute("xml:lang", "fr-FR");  // i18n
+      $html.lang = "fr";
+      $html.setAttribute("xml:lang", "fr-FR");
       $body.innerHTML = "";
       Attribute.removeAll($body);
-      Array.prototype.forEach.call(document.querySelectorAll(
+      Array.forEach(document.querySelectorAll(
             "style, link[type='text/css'], script"),
          function( $ ){ $.parentNode.removeChild($); });
-      
-      // insère le nouveau contenu
+
+      // inserts the new content
       injectStyle(GM_getResourceText("style"));
 
       var $html = document.documentElement;
       var $body = document.body;
-      
+
       $body.innerHTML = GM_getResourceText("html");
       var $controls = document.getElementById("controls");
       var $swf = document.getElementById("swf");
-      
+
       function stopFlash( ){
          var $parent = $swf.parentNode;
          if ($parent) $parent.removeChild($swf);
       }
-      
-      // boutons de contrôle du flash
+
+      // Flash control buttons
       var $startButton = document.getElementById("start-button");
       var flashLoaded = false;
-      
-      // timer pour stopper le flash quand Cassandra apparaît
+
+      // timer to stop the Flash when Cassandra shows up
       var cassandraTimer;
-      const CASSANDRA_DELAY = 420 * 1000;
+      var CASSANDRA_DELAY = 420 * 1000;
       window.addEventListener("mousemove", function( e ){
          clearTimeout(cassandraTimer);
          cassandraTimer = setTimeout(stopFlash, CASSANDRA_DELAY);
       });
-      
+
       $startButton.addEventListener("click", function( event ){
          event.preventDefault();
-         
+
          clearTimeout(cassandraTimer);
          cassandraTimer = setTimeout(stopFlash, CASSANDRA_DELAY);
-         
+
          this.textContent = "…";
          var that = this;
          setTimeout(function( ){ that.textContent = "Restart"; }, 2000);
-         
+
          if (!flashLoaded) {
             initSwf($swf);
             $body.insertBefore($swf, $body.firstChild);
-            
+
             var previousResize = 0;
             var timer = -1;
             var $html = document.documentElement;
             var resize = function resize( ){
                clearTimeout(timer);
-               var now = new Date() * 1;
+               var now = Date.now();
                if (now - previousResize >= 1000) {
                   var controlsStyle = getComputedStyle($controls, null);
                   var controlsHeight = parseInt(controlsStyle.height) +
                      parseInt(controlsStyle.borderTopWidth);
-                  $swf.width = $html.clientWidth;
-                  $swf.height = $html.clientHeight - controlsHeight;
+                  var height = $html.clientHeight - controlsHeight;
+                  $swf.height = height;
+                  $swf.width = Math.min(height * 1.3,
+                     $html.clientWidth);
                } else {
                   timer = setTimeout(resize, 1000);
                }
@@ -1456,7 +1968,7 @@ case "wonderhill": //////////////////////////////////////////////////
             }
             window.addEventListener("resize", resize);
             resize();
-            
+
             flashLoaded = true;
          } else {
             stopFlash();
@@ -1465,34 +1977,60 @@ case "wonderhill": //////////////////////////////////////////////////
             }, 700);
          }
       });
-      
+
       var $stopButton = document.getElementById("stop-button");
       $stopButton.addEventListener("click", function( event ){
          event.preventDefault();
          stopFlash();
       });
-      
+
       Module.initAll();
    }, false);
-   
+
    break;
-   
+
 }
 
-// [@AJX] Primitives ajax //////////////////////////////////////////////
+// [@AJX] Ajax Primitives //////////////////////////////////////////////
 
-const VERSION = "overarch";
-const DORSAL_SPINES = "LandCrocodile";
-const LEVIATHON = "Bevar-Asp";
-const DRACO = "Draoumculiasis";
+var VERSION = "overarch";
+var DORSAL_SPINES = "LandCrocodile";
+var LEVIATHON = "Bevar-Asp";
+var DRACO = "Draoumculiasis";
 
 var Ajax = {
    vars: {},
-   
-   // format de timestamp en secondes utilisé par le jeu
+
+   // initializes the variables from the source code of the script
+   // containing the `C.attrs` declarations, or from the `C.attrs`
+   // object itself
+   initVars: function( source ){
+      var vars = {};
+      if ("string" == typeof source) { // `source` is the source code
+         var regexp = /^\s*C\.attrs\.(\w+)\s+=\s*([^;$]+)/gm;
+         //                C .attrs .( 1 )   =   (  2   )
+         var match;
+         while (match = regexp.exec(source)) {
+            // the try/catch blocks prevents an error because of
+            // incorrect labels in `googlePaymentTokens`
+            try {
+               vars[match[1]] = eval(match[2]);
+            } catch (_) {}
+         }
+      } else { // `source` is `C.attrs`
+         for (var attr in source) if (source.hasOwnProperty(attr))
+            vars[attr] = source[attr];
+      }
+
+      Ajax.vars = vars;
+
+      expose(vars, "ajaxvars");
+   },
+
+   // timestamp format in seconds used by the game
    getTimestamp: function getTimestamp( ) "" + (new Date() / 1000 | 0),
-   
-   // les paramètres requis pour toute requête vers Wonderhill
+
+   // the parameters required by every request to Wonderhill
    get mandatoryParameters( ) ({
       "_session_id" : Ajax.vars.sessionId,
       "dragon_heart": Ajax.vars.dragonHeart,
@@ -1500,8 +2038,8 @@ var Ajax = {
       "version"     : VERSION,
       "timestamp"   : Ajax.getTimestamp()
    }),
-   
-   // transforme un objet en chaîne de paramètres d'URL
+
+   // transforms an object into an URL parameters string
    serialize: function serialize( object ){
       var chunks = [];
       for (var prop in object) {
@@ -1510,43 +2048,43 @@ var Ajax = {
       }
       return chunks.join("&");
    },
-   
-   // méthode de gestion d'erreur par défaut
+
+   // default error handling method
    error: function error( message ){
       console.error(this, message);
    },
-   
-   /** méthode de plus bas niveau : sur elle reposent toutes les autres
+
+   /** Low level Ajax method: every other methods use this one
    * @param {object} options
-   *  un objet contenant :
-   *            method  (requis) la méthode HTTP ("post" ou "get")
-   *                    
-   *               url  (requis) l'URL de la requête
-   *  
-   *        parameters  un objet contenant les paramètres de la requête
-   *                    
-   *              data  la chaîne de paramètres
-   *                    (si spécifiée, parameters est ignoré)
-   *                    
-   *           headers  un objet contenant des en-têtes additionnels
-   *                    
-   *      responseType  le type de réponse attendu
-   *                    ("arraybuffer", "json", ou "text")
-   *                    
-   *  overrideMimeType  un type MIME à forcer
-   *                    
-   *            onload  la fonction à appeler en cas de succès
-   *                    
-   *        onprogress  la fonction à appeler à chaque paquet reçu
-   *                    
-   *           onerror  la fonction à appeler en cas d'erreur
+   *  an object that may contain:
+   *            method  (required) the HTTP method ("post" or "get")
    *
-   * Important :
-   * le paramètre passé aux fonctions de rappel s'inspire de la norme
-   * XMLHttpRequest niveau 2. En particulier, il possède une propriété
-   * `response` dont le type dépend de `responseType`. Ainsi, les
-   * fonctions de rappel n'ont pas besoin de traiter `responseText` si
-   * le bon `responseType` a été demandé.
+   *               url  (required) the request URL
+   *
+   *        parameters  an object containing the request parameters
+   *
+   *              data  the parameters string
+   *                    (if specified, parameters will be ignored)
+   *
+   *           headers  an object containing additionnal headers
+   *
+   *      responseType  the expected response type
+   *                    ("arraybuffer" or "json" or "text")
+   *
+   *  overrideMimeType  a MIME type to override
+   *
+   *            onload  the function to call in case of success
+   *
+   *        onprogress  the function to call upon each packet receipt
+   *
+   *           onerror  the function to call in case of error
+   *
+   * Important:
+   * the parameter to be passed with callback functions is based on the
+   * XMLHttpRequest level 2 standard. Especially, it provides a
+   * `response` property which's type depends on `responseType`. Thus,
+   * callback function don't need to process `responseText` if the
+   * correct `responseType` has been required.
    */
    request: function request( options ){
       var method = options.method.toLowerCase();
@@ -1555,13 +2093,13 @@ var Ajax = {
          options.parameters, Ajax.mandatoryParameters));
       if ("get" == method) url += "?" + data;
       var headers = options.headers || {};
-      
+
       var nop = function( ){};
       var onprogress = options.onprogress || nop;
       var onerror = options.onerror || Ajax.error;
-      
+
       if (USE_GM_XHR) {
-      
+
          var gmOptions = {
             method    : method,
             url       : url,
@@ -1570,12 +2108,12 @@ var Ajax = {
             onerror   : onerror
          };
          if ("post" == method) gmOptions.data = data;
-         
+
          if (options.onload) switch (options.responseType) {
-         
+
             case "arraybuffer":
-               // spécifie volontairement un charset inconnu pour que le
-               // navigateur ne transforme pas les données binaires
+               // specifies an unknown charset on purpose, so that the
+               // browser doesn't transform binary data
                gmOptions.overrideMimeType =
                   "text/plain; charset=x-user-defined";
                gmOptions.onload = Ajax.switchCallback(function( r ){
@@ -1584,18 +2122,18 @@ var Ajax = {
                      var bytes = new Uint8Array(buffer);
                      for (var i = text.length; i--;)
                         bytes[i] = text.charCodeAt(i) & 0xff;
-                     // TODO 
-                     // ce traitement est potentiellement long
-                     // (le fichier map.bin fait environ 550 Ko)
-                     // => envisager l'utilisation d'un Web Worker ?
-                     
+                     // TODO
+                     // this processing is potentially long
+                     // (the "map.bin" file is about 550 Ko)
+                     // => consider using a Web Worker?
+
                      var tweakedResponse = Object.extend({
                         response: buffer
                      }, r);
                      options.onload.call(this, tweakedResponse);
                   }, options.onerror);
                break;
-               
+
             case "json":
                gmOptions.onload = Ajax.switchCallback(function( r ){
                      try {
@@ -1609,7 +2147,7 @@ var Ajax = {
                      }
                   }, options.onerror);
                break;
-            
+
             case "text":
             case "xml":
             default:
@@ -1621,39 +2159,39 @@ var Ajax = {
                   },
                   options.onerror
                );
-               
+
          }
-         
+
          if (options.overrideMimeType)
             gmOptions.overrideMimeType = options.overrideMimeType;
          GM_xmlhttpRequest(gmOptions);
-         
+
       } else {
          debug("using native XMLHttpRequest");
-         
+
          var url = options.url + "get" == method ? "?" + data : "";
-         
+
          var broker = new XMLHttpRequest();
          broker.open(method, url);
-         
+
          if ("post" == method)
             headers["content-type"] = "application/x-www-form-encoded";
-         
+
          for (var header in headers)
             broker.setRequestHeader(header, headers[header]);
          broker.responseType = options.responseType || "";
          if (options.overrideMimeType)
             broker.overrideMimeType(options.overrideMimeType);
-         
+
          broker.onload = options.onload || nop;
          broker.onprogress = options.onprogress || nop;
          broker.onerror = options.onerror || Ajax.error;
-         
+
          broker.send("post" == method ? data : null);
-         
+
       }
    },
-   
+
    switchCallback: function switchCallback( onsuccess, onerror ){
       return function( response ){
          if (200 == response.status) onsuccess(response);
@@ -1665,28 +2203,28 @@ var Ajax = {
       options.method = "get";
       Ajax.request(options);
    },
-   
+
    getJson: function getJson( options ){
       options.responseType = "json";
       Ajax.get(options);
    },
-   
+
    getBinary: function getBinary( options ){
       options.responseType = "arraybuffer";
       Ajax.get(options);
    },
-   
+
    getXml: function getXml( options ){
-      // DoA XML files aren't well formed, so I treat it as text
+      // DoA XML files aren't well formed so I treat it as text
       options.overrideMimeType = "text/plain";
       Ajax.get(options);
    },
-   
+
    post: function post( options ){
       options.method = "post";
       Ajax.request(options);
    },
-   
+
    signedPost: function signedPost( options ){
       var data = options.data || Ajax.serialize(
          Object.extend(options.parameters, Ajax.mandatoryParameters));
@@ -1704,14 +2242,14 @@ var Ajax = {
 
 };
 
-// [@SHA] Implémentation JavaScript du SHA-1 ///////////////////////////
+// [@SHA] A JavaScript Implementation of Sha-1 /////////////////////////
 
 var SHA1 = (function( ){
-   
+
    function rotateLeft32( x, n ){
       return (x << n) | (x >>> 32 - n);
    }
-   
+
    function add32( ){
       var sum = 0;
       for (var i = 0, l = arguments.length; i < l; i++) {
@@ -1719,33 +2257,33 @@ var SHA1 = (function( ){
       }
       return sum;
    }
-   
+
    function Ch( x, y, z ){
       return (x & y) | (~x & z);
    }
-   
+
    function Parity( x, y, z ){
       return x ^ y ^ z;
    }
-   
+
    function Maj( x, y, z ){
       return (x & y) | (x & z) | (y & z);
    }
-   
+
    function f( t ){
       if (t < 20) return Ch;
       if (t < 40) return Parity;
       if (t < 60) return Maj;
       return Parity;
    }
-   
+
    function K( t ){
       if (t < 20) return 0x5a827999;
       if (t < 40) return 0x6ed9eba1;
       if (t < 60) return 0x8f1bbcdc;
       return 0xca62c1d6;
    }
-   
+
    function SHA1( message ){
       var ascii = unescape(encodeURIComponent(message));
       var length = ascii.length;
@@ -1766,7 +2304,7 @@ var SHA1 = (function( ){
             0xc3d2e1f0
          ]);
       var u = new Uint32Array(6);
-      
+
       for (i = 0, offset = 0, shift = 24;
             i < length;
             i++, offset = i/4 | 0, shift = (shift + 24) % 32) {
@@ -1774,25 +2312,25 @@ var SHA1 = (function( ){
       }
       buffer[offset] |= 0x80 << shift;
       buffer[bufferLength - 1] = bitLength & 0xffffffff;
-      
+
       for (i = 0; i < bufferLength; i += 16) {
          M.push(buffer.subarray(i, i + 16));
       }
-      
+
       N = M.length;
-      
+
       for (i = 1; i <= N; i++) {
          for (t = 0; t <= 15; t++)
             W[t] = M[i-1][t];
          for (; t <= 79; t++)
             W[t] = rotateLeft32(W[t-3] ^ W[t-8] ^ W[t-14] ^ W[t-16], 1);
-         
+
          u[0] = H[0];
          u[1] = H[1];
          u[2] = H[2];
          u[3] = H[3];
          u[4] = H[4];
-         
+
          for (t = 0; t <= 79; t++) {
             u[5] = add32(rotateLeft32(u[0], 5), f(t)(u[1], u[2], u[3]),
                u[4], K(t), W[t]);
@@ -1802,15 +2340,15 @@ var SHA1 = (function( ){
             u[1] = u[0];
             u[0] = u[5];
          }
-         
+
          H[0] = add32(u[0], H[0]);
          H[1] = add32(u[1], H[1]);
          H[2] = add32(u[2], H[2]);
          H[3] = add32(u[3], H[3]);
          H[4] = add32(u[4], H[4]);
-         
+
       }
-      
+
       var resultString = "";
       var s;
       for (i = 0; i < 5; i++) {
@@ -1819,6 +2357,6 @@ var SHA1 = (function( ){
       }
       return resultString;
    }
-   
+
    return SHA1;
 }());

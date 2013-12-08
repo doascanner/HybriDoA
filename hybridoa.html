@@ -14,9 +14,7 @@
    Flash en utilisant les boutons «&nbsp;start&nbsp;» et
    «&nbsp;stop&nbsp;».</p>
 </section>
-
-<aside id="breadcrumb"></aside>
-
+   
 <object data=""
       id="swf"
       type="application/x-shockwave-flash"
@@ -28,15 +26,34 @@
    <param name="flashvars" value="">
 </object>
 
+<!-- le dashboard affiche diverses données sur l'état actuel du jeu -->
+<aside id="dashboard">
+   <section id=realm>
+      
+      <dl>
+         <dt></dt>
+         <dd></dd>
+         <dt></dt>
+         <dd></dd>
+         <dt></dt>
+         <dd></dd>
+      </dl>
+      <p>
+         <a href=# id=realm-button>Changer de royaume</a>
+      </p>
+   </section>
+</aside>
+
 <nav id="controls">
    <ul id="swf-controls" class="button-list">
       <li>
-         <a class="button" id="start-button">Start</a>
+         <a href="#" class="button" id="start-button">Start</a>
       </li>
       <li>
-         <a class="button" id="stop-button">Stop</a>
+         <a href="#" class="button" id="stop-button">Stop</a>
       </li>
    </ul>
    
+   <!-- la barre "tests" reçoit les boutons des différents modules -->
    <ul id="tests" class="button-list"></ul>
 </nav>
