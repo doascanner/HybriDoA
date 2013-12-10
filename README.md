@@ -19,6 +19,8 @@ Actuellement réalisé :
 
 - Changement de royaume
 - Chance de Fortuna / Salle des coffres
+- Affichage de la carte (ébauche)
+- Liste (rudimentaire) des entraînements en cours
 
 
 Guide d'installation
@@ -30,7 +32,7 @@ Pour l'installer, c'est très simple&nbsp;! Suivez ces quelques étapes&nbsp;:
 1. Assurez-vous de posséder [la dernière version de Firefox](https://www.mozilla.org/fr/firefox/fx/).
 2. Installez l'extension [Greasemonkey](https://addons.mozilla.org/fr/firefox/addon/greasemonkey/).
 3. Si Firefox vous demande de redémarrer, acceptez.
-4. Suivez le lien [HybriDoA.user.js](https://github.com/Watilin/HybriDoA/raw/master/HybriDoA.user.js).
+4. Suivez le lien [HybriDoA.user.js](https://raw.github.com/Watilin/HybriDoA/master/HybriDoA.user.js).
     Greasemonkey détecte alors le script et vous propose de l'installer&nbsp;: acceptez.
 5. C'est tout&nbsp;! Vous pouvez jouer immédiatement sur Kabam, le script agit automatiquement.
 
@@ -42,9 +44,11 @@ des modules complémentaires de Firefox (Contrôle-majuscule-A), sous l'onglet d
 Contribuez !
 ------------
 
-Voici quelques conseils si vous voulez contribuer au projet.
+Forkez-moi ! Je suis à l'écoute de toute suggestion.
 
-- Repérez les différents fichiers du projet :
+Voici quelques conseils pour vous y retrouver.
+
+- Les différents fichiers du projet :
     * **hybridoa.user.js** est le fichier principal. Il est documenté à
       l'intérieur.
     * **hybridoa.html** contient la mise en page de remplacement, qui
@@ -59,10 +63,4 @@ Voici quelques conseils si vous voulez contribuer au projet.
    * [sur la doc du MSDN (fr)](http://msdn.microsoft.com/fr-fr/library/ie/br230269%28v=vs.94%29.aspx)
    * [sur le blog de John Resig (en)](http://ejohn.org/blog/ecmascript-5-strict-mode-json-and-more/)
 
-- Je sais qu'il est possible de dialoguer avec les différents serveurs du
-   jeu sans utiliser `GM_xmlhttpRequest`, le script Kabalistics de Jawz le
-   fait. Ainsi, il devrait être possible de rendre HybriDoA compatible avec
-   d'autres navigateurs que Firefox.
-   Je cherche des gens pour m'aider dans cette quête. Si vous vous y
-   connaissez en développement de userscripts (de préférence natifs) pour
-   Chrome ou Opera, vous êtes les bienvenus !
+- Je développe avant tout pour Firefox, notamment parce qu'il est le seul (pour l'instant) à fournir l'évènement `beforescriptexecute`. La compatibilité avec Chrome/Chromium n'est pas une priorité pour moi. Si vous souhaitez vous engager dans cette voie, je vous y encourage de tout cœur !
