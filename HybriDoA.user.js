@@ -7,10 +7,10 @@
 // @include       https://www.kabam.com/fr/games/dragons-of-atlantis/play*
 // @match         https://*.castle.wonderhill.com/platforms/kabam/*
 //
-// @icon          hybridoa.png
-// @resource      html        hybridoa.html
-// @resource      style       hybridoa.css
-// @resource      terrains    terrains-sprite.png
+// @icon          https://raw.github.com/Watilin/HybriDoA/master/hybridoa.png
+// @resource      html        https://raw.github.com/Watilin/HybriDoA/master/hybridoa.html
+// @resource      style       https://raw.github.com/Watilin/HybriDoA/master/hybridoa.css
+// @resource      terrains    https://raw.github.com/Watilin/HybriDoA/master/terrains-sprite.png
 //
 // @run-at        document-start
 // @grant         GM_xmlhttpRequest
@@ -20,7 +20,7 @@
 // @homepage      https://github.com/Watilin/HybriDoA#hybridoa
 // @author        Watilin
 // @copyright     2013+, Watilin
-// @license       Creative Commons by-nc-sa
+// @license       Creative Commons 4.0 BY-NC-SA, http://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
 // ==/UserScript==
 
 /* >>>>>>>>>>>>>>>>>>>>>>> IMPORTANT! <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -1329,14 +1329,14 @@ new Module("Map", function( w ){
       $p = document.createElement("p");
       $p.appendChild($label);
       $form.appendChild($p);
-      
+
       $h4 = document.createElement("h4");
       $h4.textContent = "Override";
       $form.appendChild($h4);
-      
+
       $p = document.createElement("p");
       $form.appendChild($p);
-      
+
       var $nInput = $xInput.cloneNode();
       $nInput.max = 9;
       $nInput.size = 1;
@@ -1345,7 +1345,7 @@ new Module("Map", function( w ){
       $label.textContent = "n ";
       $label.appendChild($nInput);
       $p.appendChild($label);
-      
+
       var $mInput = $xInput.cloneNode();
       $mInput.max = 20;
       $mInput.size = 2;
@@ -1373,8 +1373,8 @@ new Module("Map", function( w ){
       /**
        * Calculates the offset x, y pixel values within the sprite sheet
        * to display the terrain located at the (u, v) coordinates.
-       * @param u       
-       * @param v       
+       * @param u
+       * @param v
        */
       function calculateSpriteOffset( u, v ){
          var byte = buffer[MAP_HEADER_LENGTH + MAP_HEIGHT * u + v];
@@ -1387,13 +1387,13 @@ new Module("Map", function( w ){
             y: SPRITE_HEIGHT * spriteLevel
          };
       }
-   
+
       /**
        * Draws a region of the map around the given (u, v) point
        * into a canvas.
        * @param cx   the canvas' 2d context
-       * @param uO   map x coordinate of the center tile
-       * @param vO   map y coordinate of the center tile
+       * @param uO   the center tile's in-map easting
+       * @param vO   the center tile's in-map northing
        * @param p    zoom percentage
        */
       function drawRegion( cx, uO, vO, p ){
@@ -1402,25 +1402,20 @@ new Module("Map", function( w ){
          var H = CANVAS_HEIGHT;
          var w = SPRITE_WIDTH;
          var h = SPRITE_HEIGHT;
-         
+
          cx.clearRect(0, 0, W, H);
 
          var n = Math.ceil(W / (2 * w * p));
          var m = Math.ceil(H / (2 * h * p));
 
-         // debug("n =", n, ", m =", m);
+         debug("n =", n, ", m =", m);
 
-         // OVERRIDE
-         n = $nInput.value | 0;
-         m = $mInput.value | 0;
-         
-         
          var x; // sprite x on the canvas
          var y; // sprite y on the canvas
          var u; // sprite x on the map
          var v; // sprite y on the map
-         
-         // centered axis
+
+         // centers the axis onto the reference tile
          cx.strokeStyle = "rgba(255, 255, 255, 0.2)";
          cx.lineWidth = 1;
          cx.beginPath();
@@ -1429,9 +1424,9 @@ new Module("Map", function( w ){
          cx.moveTo(W/2 + 0.5, 0);
          cx.lineTo(W/2 + 0.5, H);
          cx.stroke();
-         
-         for (var i = -n; i <= +n; i++) {
-            for (var j = -m; j <= +m; j++) {
+
+         for (var i = 0; i <= n; i++) {
+            for (var j = 0; j <= m; j++) {
                u = (uO + i) % MAP_WIDTH;
                if (u < 0) u += MAP_WIDTH;
                v = (vO + j) % MAP_HEIGHT;
@@ -1439,7 +1434,7 @@ new Module("Map", function( w ){
                var so = calculateSpriteOffset(u, v);
                x = w * p * (i + j) / 2 + (W - w * p) / 2;
                y = h * p * (i - j) / 2 + (H - h * p) / 2;
-               
+
                cx.drawImage($spriteSheet,
                   so.x, so.y,
                   w, h,
@@ -1457,11 +1452,11 @@ new Module("Map", function( w ){
                //   in float dw,             destination width  (scaling)
                //   in float dh              destination height (scaling)
                // );
-               
+
             }
          }
       }
-      
+
       function draw( ){
          if (!$canvas.parentNode) {
             $form.appendChild($canvas);
@@ -1479,10 +1474,11 @@ new Module("Map", function( w ){
          event.preventDefault();
          draw();
       });
-      
+
+      // TODO wheel events compatibility
       $canvas.onwheel = function( event ){
          event.preventDefault();
-         var p = ($zoomInput.value = parseFloat($zoomInput.value) || 1)
+         var p = ($zoomInput.value = parseFloat($zoomInput.value) || 1);
          // multiplies by 100 to avoid floating point deviations
          p = Math.round(p * 100);
          if (event.deltaY > 0) {
