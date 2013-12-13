@@ -7,7 +7,6 @@
 // @include       https://www.kabam.com/fr/games/dragons-of-atlantis/play*
 // @match         https://*.castle.wonderhill.com/platforms/kabam/*
 //
-// @icon          https://raw.github.com/Watilin/HybriDoA/master/hybridoa.png
 // @resource      html        https://raw.github.com/Watilin/HybriDoA/master/hybridoa.html
 // @resource      style       https://raw.github.com/Watilin/HybriDoA/master/hybridoa.css
 // @resource      terrains    https://raw.github.com/Watilin/HybriDoA/master/terrains-sprite.png
@@ -18,6 +17,7 @@
 // @grant         GM_getResourceURL
 //
 // @homepage      https://github.com/Watilin/HybriDoA#hybridoa
+// @icon          https://raw.github.com/Watilin/HybriDoA/master/hybridoa.png
 // @author        Watilin
 // @copyright     2013+, Watilin
 // @license       Creative Commons 4.0 BY-NC-SA, http://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
@@ -221,9 +221,9 @@ var Attribute = {
    removeAll: function( $element, except ){
       except = except instanceof Array ?
          except : Array.slice(arguments, 1);
-      except = except.map(function( item ) "" + item).sort();
+      except = except.map(function( item ){ return "" + item; }).sort();
       var attributes = Array.map($element.attributes,
-         function( attr ) attr);
+         function( attr ){ return attr; });
       Array.forEach(attributes, function( attr ){
          var name = attr.name;
          if (except.indexOf(name) < 0) $element.removeAttribute(name);
@@ -273,7 +273,7 @@ switch (currentHost) {
          var origin = message.origin;
          debug("[K<-W] ", message);
          if (wonderhillOrigin) {
-            if (origin != wonderhillOrigin) return;
+            if (origin !== wonderhillOrigin) return;
          } else {
             var regexp =
                /^https:\/\/realm\d+\.c\d+\.castle\.wonderhill\.com$/;
@@ -307,7 +307,7 @@ switch (currentHost) {
 
       window.onmessage = function( message ){
          debug("[K->W] ", message);
-         if ("https://www.kabam.com" != message.origin) return;
+         if ("https://www.kabam.com" !== message.origin) return;
 
          var code = message.data.code;
          try {
@@ -328,21 +328,24 @@ switch (currentHost) {
 // code, thus allowing it to be sent via postMessage
 function serializeFunctions( arg ){
    // basic type case
-   if ("object" != typeof arg)
+   if ("object" !== typeof arg) {
       return arg;
+   }
 
    // array case
-   if (arg instanceof Array)
+   if (arg instanceof Array) {
       return arg.map(item => serializeFunctions(item));
+   }
 
    // object case
    var clone = {};
    for (var name in arg) if (arg.hasOwnProperty(name)) {
       var prop = arg[name];
-      if ("function" == typeof prop)
+      if ("function" === typeof prop) {
          clone[name] = prop.toString();
-      else
+      } else {
          clone[name] = serializeFunctions(prop);
+      }
    }
    return clone;
 }
@@ -363,7 +366,7 @@ var expose = top === window ?
       var exposeArray = [];
       return function expose( obj, name ){
          if (name) {
-            debug("exposed `" + name + "` in the main page's context");
+            debug("exposed `" + name + "` in the main page’s context");
             unsafeWindow[name] = obj;
          } else {
             if (!exposeName) {
@@ -409,8 +412,8 @@ function Window( title, $control ){
    }, false);
 
    this.$window.addEventListener("transitionend", function( event ){
-      if (event.propertyName == "opacity") {
-         if ("0" == this.style.opacity) {
+      if (event.propertyName === "opacity") {
+         if ("0" === this.style.opacity) {
             this.style.display = "none";
             that.isOpened = false;
          }
@@ -476,7 +479,7 @@ Window.prototype = {
       var $container = this.$container;
       if (contents instanceof Array) {
          contents.forEach(function( c ){ $container.appendChild(c); });
-      } else if ("string" == typeof contents) {
+      } else if ("string" === typeof contents) {
          $container.textContent = contents;
       } else {
          $container.appendChild(contents);
@@ -503,8 +506,8 @@ Window.prototype = {
       var $w = this.$window;
       var $spinner = this.$spinner;
       var computed = getComputedStyle($spinner, null);
-      var width = parseInt(computed.width, 10);
-      var height = parseInt(computed.height, 10);
+      var width = parseInt(computed.width);
+      var height = parseInt(computed.height);
       var style = $spinner.style;
       style.paddingLeft = ($w.offsetWidth - width) / 2 + "px";
       style.paddingTop = ($w.offsetHeight - height) / 2 + "px";
@@ -694,7 +697,7 @@ new Module("Royaume", function( w ){
                $option = document.createElement("option");
                $option.value = loc;
                $option.textContent = locales[loc];
-               if (loc == selectedLocale) $option.selected = true;
+               if (loc === selectedLocale) $option.selected = true;
                $select.appendChild($option);
             }
 
@@ -753,15 +756,16 @@ new Module("Royaume", function( w ){
                if (i < 0) continue;
                if (i < 5) {
                   $th = document.createElement("th");
+                  $th.scope = "col";
                   $th.textContent = match[0];
                   $headRow.appendChild($th);
                } else {
                   if (!(i % 5)) {
-                     realmId = parseInt(match[0], 10);
+                     realmId = parseInt(match[0]);
                      if (!realmId) break;
                      $row = $tbody.insertRow(-1);
-                     if (realmId ==
-                           location.hostname.match(/realm(\d+)/)[1]) {
+                     if (realmId === parseInt(
+                           location.hostname.match(/realm(\d+)/)[1])) {
                         $row.classList.add("selected-realm");
                         $selectedRealm = $row;
                         currentRealmId = realmId;
@@ -781,14 +785,15 @@ new Module("Royaume", function( w ){
 
             $table.addEventListener("click", function( event ){
                var $target = event.target;
-               if ("td" != $target.tagName.toLowerCase()) return;
-               if ($selectedRealm)
+               if ("td" !== $target.tagName.toLowerCase()) return;
+               if ($selectedRealm) {
                   $selectedRealm.classList.remove("selected-realm");
+               }
                var $tr = $target.parentNode;
                $tr.classList.add("selected-realm");
                $selectedRealm = $tr;
                selectedRealmId = $tr.firstChild.textContent * 1;
-               $ok.classList[selectedRealmId == currentRealmId ?
+               $ok.classList[selectedRealmId === currentRealmId ?
                   "add" : "remove"]("disabled");
             }, false);
 
@@ -946,13 +951,13 @@ new Module("Fortuna", function( w ){
       Ajax.getJson({
          url: Ajax.vars.apiServer + "/minigames/index.json",
          parameters: { ticket_type: ticketType },
-         onload: function( r ){
-            var json = r.response;
+         onload: function( rawResponse ){
+            var json = rawResponse.response;
             var timestamp = json.timestamp | 0;
             var prizeList = json.result.prize_list;
 
             var $heading = document.createElement("h4");
-            $heading.textContent = "regular" == ticketType ?
+            $heading.textContent = "regular" === ticketType ?
                "Chance de Fortuna" : "Salle des coffres";
 
             var $table = document.createElement("table");
@@ -1043,7 +1048,7 @@ new Module("Fortuna", function( w ){
          GameData.retrieve("langFr", function( data, error ){
             if (error) {
                w.error("Erreur pas trop grave",
-                  "Je n'ai pas pu charger le fichier de langue, " +
+                  "Je n’ai pas pu charger le fichier de langue, " +
                   "les objets seront affichés sans traduction.\n" +
                   "(raison\xA0:\n" + error + ")");
                debug(error);
@@ -1060,10 +1065,12 @@ new Module("Fortuna", function( w ){
                "(?:<name>(" + range + "*?)</name>\\s*)?" +
                "</\\1>");
             var match = data.match(regexp);
-            var decoded = match && match.map(function( m ) m ?
-               m.replace(/&#(\d+);/g, function( _, d )
-                  eval("'\\x" + parseInt(d).toString(16) + "'")) :
-               "");
+            var decoded = match && match.map(function( m ){
+               if (!m) return "";
+               return m.replace(/&#(\d+);/g, function( _, d ){
+                  return eval("'\\x" + parseInt(d).toString(16) + "'");
+               });
+            });
 
             if (decoded) {
                var name = decoded[2] || decoded[4];
@@ -1107,12 +1114,12 @@ new Module("Fortuna", function( w ){
       var chestName;
 
       chunks.forEach(function( chunk ){
-         if (    "K" == chunk) isResource = true;
-         if ("Troop" == chunk) isTroop = true;
-         if ("Stack" == chunk) isStack = true;
-         if ("Chest" == chunk) isChest = true;
-         if ( "Gold" == chunk) isGold = true;
-         if (  "Egg" == chunk) isEgg = true;
+         if (    "K" === chunk) isResource = true;
+         if ("Troop" === chunk) isTroop = true;
+         if ("Stack" === chunk) isStack = true;
+         if ("Chest" === chunk) isChest = true;
+         if ( "Gold" === chunk) isGold = true;
+         if (  "Egg" === chunk) isEgg = true;
          if (   !isNaN(chunk)) num = chunk;
       });
       if (isTroop && !isStack) {
@@ -1130,7 +1137,7 @@ new Module("Fortuna", function( w ){
             GameData.retrieve("chests", function( data, error ){
                if (error) {
                   w.error("Erreur pas trop grave",
-                     "Je n'ai pas pu charger les images des coffres, " +
+                     "Je n’ai pas pu charger les images des coffres, " +
                      "ils auront tous l’image par défaut.\n" +
                      "(raison\xA0:\n" + error + ")");
                   return;
@@ -1145,9 +1152,9 @@ new Module("Fortuna", function( w ){
             });
          } else if (isEgg) {
             var eggType = chunks[1].toLowerCase();
-            if ("mephitic" == eggType) eggType = "swamp";
-            if (   "helio" == eggType) eggType = "desert";
-            if ("dragon" == eggType) eggType = chunks[0].toLowerCase();
+            if ("mephitic" === eggType) eggType = "swamp";
+            if (   "helio" === eggType) eggType = "desert";
+            if ("dragon" === eggType) eggType = chunks[0].toLowerCase();
             src = eggType + "dragonegg";
          } else if (isStack) {
             src = chunks.slice(0, chunks.indexOf("Stack"))
@@ -1170,15 +1177,15 @@ new Module("Fortuna", function( w ){
             ticket_type: ticketType,
             minigame_timestamp: timestamp
          },
-         onerror: function( r ){
-            debug(r);
+         onerror: function( rawResponse ){
+            debug(rawResponse);
             w.error("Erreur de connexion", "", function( ){
                displayMenu();
             });
 
          },
-         onload: function( r ){
-            var result = r.response.result;
+         onload: function( rawResponse ){
+            var result = rawResponse.response.result;
             if (!result.success) {
                w.error("Erreur du serveur", result.reason, function( ){
                   displayMenu();
@@ -1370,17 +1377,16 @@ new Module("Map", function( w ){
       $canvas.height = CANVAS_HEIGHT;
       var buffer = new Uint8Array(map);
 
-      /**
-       * Calculates the offset x, y pixel values within the sprite sheet
-       * to display the terrain located at the (u, v) coordinates.
-       * @param u
-       * @param v
+      /** Calculates the offset {x, y} pixel values within the sprite
+       * sheet to display the terrain located at the given coordinates.
+       * @param u   the terrain's easting
+       * @param v   the terrain's northing
        */
       function calculateSpriteOffset( u, v ){
          var byte = buffer[MAP_HEADER_LENGTH + MAP_HEIGHT * u + v];
          var type = byte >> 4 % 16;
          var level = byte % 16;
-         var spriteLevel = 10 == level ? 2 :
+         var spriteLevel = 10 === level ? 2 :
             Math.floor((level - 1) / 3);
          return {
             x: SPRITE_WIDTH * (type - 1), // - 1 because 0 = city
@@ -1388,9 +1394,8 @@ new Module("Map", function( w ){
          };
       }
 
-      /**
-       * Draws a region of the map around the given (u, v) point
-       * into a canvas.
+      /** Draws a region of the map around the given (u, v) point into
+       * a canvas.
        * @param cx   the canvas' 2d context
        * @param uO   the center tile's in-map easting
        * @param vO   the center tile's in-map northing
@@ -1464,8 +1469,8 @@ new Module("Map", function( w ){
          }
          drawRegion(
             $canvas.getContext("2d"),
-            parseInt($xInput.value, 10) | 0,
-            parseInt($yInput.value, 10) | 0,
+            parseInt($xInput.value) | 0,
+            parseInt($yInput.value) | 0,
             parseFloat($zoomInput.value) || 1
          );
       }
@@ -1513,23 +1518,126 @@ new Module("Map", function( w ){
    });
 });
 
+new Module("Messages", function( w ){
+    w.wait();
+    Ajax.getJson({
+      url: Ajax.vars.apiServer + "/reports.json",
+      parameters: {
+         category: "all",
+         page    : 1,
+         count   : 12
+      },
+      onload: function( rawResponse ){
+         var result = rawResponse.response.result;
+         debug(result);
+
+         if (!result.success || "false" === result.success) {
+            w.error("Erreur du serveur",
+               result.reason || "Pas d’explication…",
+               function( ){ w.close(); });
+            return;
+         }
+
+         var $table = document.createElement("table");
+         $table.id = "messages-table";
+         var $headRow = $table.createTHead().insertRow(-1);
+
+         var $created = document.createElement("th");
+         $created.scope = "col";
+         $created.textContent = "Date";
+         $headRow.appendChild($created);
+
+         var $from = document.createElement("th");
+         $from.scope = "col";
+         $from.textContent = "De";
+         $headRow.appendChild($from);
+
+         var $summary = document.createElement("th");
+         $summary.scope = "col";
+         $summary.textContent = "Sujet";
+         $headRow.appendChild($summary);
+
+         var $tbody = $table.createTBody();
+         Array.forEach(result.report_notifications, function( notif ){
+            var $row = $tbody.insertRow(-1);
+            var $created = $row.insertCell(-1);
+            var $from    = $row.insertCell(-1);
+            var $summary = $row.insertCell(-1);
+
+            $created.textContent =
+               new Date(notif.created_at * 1000).toShortFormat();
+            $from.textContent = notif.from ? notif.from.name : "";
+            $summary.textContent = notif.summary;
+
+            $row.addEventListener("click", function( ){
+               var messageWindow = new Window(notif.summary);
+               messageWindow.open();
+               messageWindow.wait();
+               Ajax.getJson({
+                  url: Ajax.vars.apiServer +
+                     "/reports/" + notif.id + ".json",
+                  onload: function( rawResponse ){
+                     var result = rawResponse.response.result;
+                     debug(result);
+
+                     if (!result.success || "false" === result.success) {
+                        messageWindow.error("Erreur du serveur",
+                           result.reason || "Pas d’explication…",
+                           function( ){ w.close(); });
+                        return;
+                     }
+                     var report = result.report;
+
+                     var $pre = document.createElement("pre");
+                     switch (notif.report_type) {
+                     case "PlayerMessage":
+                     case "AllianceMessage":
+                     case "TargetedMessage":
+                        $pre.textContent = report.message;
+                        break;
+                     default:
+                        $pre.textContent = "TODO: reports of type `" +
+                           notif.report_type + "`";
+                           for (var key in report) {
+                              if (report.hasOwnProperty(key)) {
+                                 $pre.textContent += "\n" + key +
+                                    "\t:\t" + report[key];
+                              }
+                           }
+                        break;
+                     }
+                     messageWindow.update([$pre]);
+
+                     $row.classList.remove("unread");
+                  }
+               });
+            });
+
+            if (!notif.read_at) $row.classList.add("unread");
+         });
+
+         w.update($table);
+      }
+    });
+});
+
 new Module("Trainings", function( w ){
    w.$window.id = "trainings";
    w.wait();
 
    Ajax.getJson({
       url: Ajax.vars.apiServer + "/player/jobs.json",
-      onload: function( r ){
-         var earlyResult = r.response.result;
+      onload: function( rawResponse ){
+         var earlyResult = rawResponse.response.result;
          if (!earlyResult.success) {
             w.error("Erreur",
-               "Le serveur n'a pas renvoyé de résultat.",
+               "Le serveur n’a pas renvoyé de résultat.",
                function( ){ w.close(); });
             return;
          }
          if ("false" === earlyResult.success) {
             w.error("Erreur du serveur",
-               earlyResult.reason || "Pas d'explication…",
+               earlyResult.reason || "Pas d’explication…",
                function( ){ w.close(); });
             return;
          }
@@ -1538,10 +1646,10 @@ new Module("Trainings", function( w ){
          var contents = [];
          var total = {};
          var $table = document.createElement("table");
-         for (let cityName in cities) {
-            let $tbody;
-            let $cityFirstRow;
-            let cityRowCount = 0;
+         for (var cityName in cities) {
+            var $tbody;
+            var $cityFirstRow;
+            var cityRowCount = 0;
             cities[cityName].forEach(function( job ){
                if ("units" !== job.queue) return;
 
@@ -1565,7 +1673,7 @@ new Module("Trainings", function( w ){
                total[unit] = (total[unit] || 0) + quantity;
             });
             if ($tbody) {
-               let $cityNameCell = document.createElement("th");
+               var $cityNameCell = document.createElement("th");
                $cityNameCell.textContent = cityName;
                $cityNameCell.rowSpan = cityRowCount;
                $cityFirstRow.insertBefore($cityNameCell,
@@ -1573,15 +1681,37 @@ new Module("Trainings", function( w ){
             }
          }
          if ($table) {
-            let $headRow = $table.createTHead().insertRow(-1);
-            $headRow.insertCell(-1).textContent = "Lieu";
-            $headRow.insertCell(-1).textContent = "Unité";
-            $headRow.insertCell(-1).textContent = "Quantité";
-            $headRow.insertCell(-1).textContent = "Fin prévue";
-            $headRow.insertCell(-1).textContent = "Durée";
-            // let $h4 = document.createElement("h4");
+            var $headRow = $table.createTHead().insertRow(-1);
+
+            var $place = document.createElement("th");
+            $place.scope = "col";
+            $place.textContent = "Lieu";
+            $headRow.appendChild($place);
+
+            var $unit = document.createElement("th");
+            $unit.scope = "col";
+            $unit.textContent = "Unité";
+            $headRow.appendChild($unit);
+
+            var $quantity = document.createElement("th");
+            $quantity.scope = "col";
+            $quantity.textContent = "Quantité";
+            $headRow.appendChild($quantity);
+
+            var $end = document.createElement("th");
+            $end.scope = "col";
+            $end.textContent = "Fin prévue";
+            $headRow.appendChild($end);
+
+            var $duration = document.createElement("th");
+            $duration.scope = "col";
+            $duration.textContent = "Durée";
+            $headRow.appendChild($duration);
+
+            // var $h4 = document.createElement("h4");
             // $h4.textContent = cityName;
             // contents.push($h4);
+
             contents.push($table);
          }
 
@@ -1634,7 +1764,7 @@ var GameData = (function( ){
          if (!handler.pendingRequests.length) {
             Ajax[handler.loadMethod](Object.extend(handler.options, {
                url: handler.url.replace(/\{([^\}]+)\}/g,
-                  function( _, varName ) Ajax.vars[varName]),
+                  function( _, varName ){ return Ajax.vars[varName]; }),
 
                onload: function( response ){
                   var data = response.response;
@@ -1647,14 +1777,16 @@ var GameData = (function( ){
                         detail: { data: data }
                      }));
                   var request;
-                  while (request = handler.pendingRequests.pop())
+                  while (request = handler.pendingRequests.pop()) {
                      request(data);
+                  }
                },
 
                onerror: function( error ){
                   var request;
-                  while (request = handler.pendingRequests.pop())
+                  while (request = handler.pendingRequests.pop()) {
                      request(null, error);
+                  }
                }
             }));
          }
@@ -2002,7 +2134,7 @@ var Ajax = {
    // object itself
    initVars: function( source ){
       var vars = {};
-      if ("string" == typeof source) { // `source` is the source code
+      if ("string" === typeof source) { // `source` is the source code
          var regexp = /^\s*C\.attrs\.(\w+)\s+=\s*([^;$]+)/gm;
          //                C .attrs .( 1 )   =   (  2   )
          var match;
@@ -2024,16 +2156,20 @@ var Ajax = {
    },
 
    // timestamp format in seconds used by the game
-   getTimestamp: function getTimestamp( ) "" + (new Date() / 1000 | 0),
+   get timestamp( ){
+      return "" + (new Date() / 1000 | 0);
+   },
 
    // the parameters required by every request to Wonderhill
-   get mandatoryParameters( ) ({
-      "_session_id" : Ajax.vars.sessionId,
-      "dragon_heart": Ajax.vars.dragonHeart,
-      "user_id"     : Ajax.vars.userId,
-      "version"     : VERSION,
-      "timestamp"   : Ajax.getTimestamp()
-   }),
+   get mandatoryParameters( ){
+      return {
+         "_session_id" : Ajax.vars.sessionId,
+         "dragon_heart": Ajax.vars.dragonHeart,
+         "user_id"     : Ajax.vars.userId,
+         "version"     : VERSION,
+         "timestamp"   : Ajax.timestamp
+      };
+   },
 
    // transforms an object into an URL parameters string
    serialize: function serialize( object ){
@@ -2087,7 +2223,7 @@ var Ajax = {
       var url = options.url;
       var data = options.data || Ajax.serialize(Object.extend(
          options.parameters, Ajax.mandatoryParameters));
-      if ("get" == method) url += "?" + data;
+      if ("get" === method) url += "?" + data;
       var headers = options.headers || {};
 
       var nop = function( ){};
@@ -2103,7 +2239,7 @@ var Ajax = {
             onprogress: onprogress,
             onerror   : onerror
          };
-         if ("post" == method) gmOptions.data = data;
+         if ("post" === method) gmOptions.data = data;
 
          if (options.onload) switch (options.responseType) {
 
@@ -2112,8 +2248,9 @@ var Ajax = {
                // browser doesn't transform binary data
                gmOptions.overrideMimeType =
                   "text/plain; charset=x-user-defined";
-               gmOptions.onload = Ajax.switchCallback(function( r ){
-                     var text = r.responseText;
+               gmOptions.onload = Ajax.createCallbackSwitcher(
+                  function( rawResponse ){
+                     var text = rawResponse.responseText;
                      var buffer = new ArrayBuffer(text.length);
                      var bytes = new Uint8Array(buffer);
                      for (var i = text.length; i--;)
@@ -2125,72 +2262,82 @@ var Ajax = {
 
                      var tweakedResponse = Object.extend({
                         response: buffer
-                     }, r);
-                     options.onload.call(this, tweakedResponse);
-                  }, options.onerror);
+                     }, rawResponse);
+                     options.onload(tweakedResponse);
+                  },
+                  options.onerror
+               );
                break;
 
             case "json":
-               gmOptions.onload = Ajax.switchCallback(function( r ){
+               gmOptions.onload = Ajax.createCallbackSwitcher(
+                  function( rawResponse ){
                      try {
                         var tweakedResponse = Object.extend({
-                           response: JSON.parse(r.responseText)
-                        }, r);
-                        options.onload.call(this, tweakedResponse);
+                           response: JSON.parse(rawResponse.responseText)
+                        }, rawResponse);
+                        options.onload(tweakedResponse);
                      } catch (error) {
-                        error.relatedData = r;
-                        (options.onerror || Ajax.error).call(this, error);
+                        error.relatedData = rawResponse;
+                        (options.onerror || Ajax.error)(error);
                      }
-                  }, options.onerror);
+                  },
+                  options.onerror
+               );
                break;
 
             case "text":
             case "xml":
             default:
-               gmOptions.onload = Ajax.switchCallback(function( r ){
+               gmOptions.onload = Ajax.createCallbackSwitcher(
+                  function( rawResponse ){
                      var tweakedResponse = Object.extend({
-                        response: r.responseText
-                     }, r);
-                     options.onload.call(this, tweakedResponse);
+                        response: rawResponse.responseText
+                     }, rawResponse);
+                     options.onload(tweakedResponse);
                   },
                   options.onerror
                );
 
          }
 
-         if (options.overrideMimeType)
+         if (options.overrideMimeType) {
             gmOptions.overrideMimeType = options.overrideMimeType;
+         }
          GM_xmlhttpRequest(gmOptions);
 
       } else {
          debug("using native XMLHttpRequest");
 
-         var url = options.url + "get" == method ? "?" + data : "";
+         var url = options.url + "get" === method ? "?" + data : "";
 
          var broker = new XMLHttpRequest();
          broker.open(method, url);
 
-         if ("post" == method)
+         if ("post" === method) {
             headers["content-type"] = "application/x-www-form-encoded";
+         }
 
-         for (var header in headers)
+         for (var header in headers) {
             broker.setRequestHeader(header, headers[header]);
+         }
          broker.responseType = options.responseType || "";
-         if (options.overrideMimeType)
+         if (options.overrideMimeType) {
             broker.overrideMimeType(options.overrideMimeType);
+         }
 
          broker.onload = options.onload || nop;
          broker.onprogress = options.onprogress || nop;
          broker.onerror = options.onerror || Ajax.error;
 
-         broker.send("post" == method ? data : null);
-
+         broker.send("post" === method ? data : null);
       }
    },
 
-   switchCallback: function switchCallback( onsuccess, onerror ){
+   createCallbackSwitcher: function createCallbackSwitcher( onsuccess,
+                                                            onerror ){
       return function( response ){
-         if (200 == response.status) onsuccess(response);
+         if (200 === response.status) onsuccess(response);
          else (onerror || Ajax.error)(response);
       };
    },

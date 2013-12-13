@@ -388,6 +388,7 @@ table {
 }
 thead tr {
    background: linear-gradient(to bottom, #2ae, #134);
+   font-size: 75%;
 }
 th {
    padding: 0.5ex 1em;
@@ -397,6 +398,7 @@ th {
 }
 td {
    padding: 0.5ex 1em;
+   white-space: nowrap;
 }
 tbody tr {
    transition: 0.1s;
@@ -449,7 +451,7 @@ tr.selected-realm:hover {
    min-width: 0;
 }
 #fortuna-table tr {
-   background: transparent !important;
+   background: transparent;
 }
 #fortuna-table td {
    padding: 0;
@@ -486,9 +488,6 @@ tr.selected-realm:hover {
 
 /******************* “Trainings” module *******************************/
 
-#trainings thead tr {
-   font-size: 67%;
-}
 #trainings tbody:nth-child(even) {
    background: rgba(144, 144, 144, 0.1);
 }
@@ -496,15 +495,10 @@ tr.selected-realm:hover {
    background: none;
 }
 #trainings td {
-   white-space: nowrap;
    background: none;
 }
 #trainings tbody tr:hover td {
    background: rgba(144, 144, 144, 0.3);
-}
-#trainings th {
-   color: #eee;
-   font-weight: bold;
 }
 #trainings tbody:hover th {
    background: rgba(144, 144, 144, 0.3);
@@ -512,6 +506,15 @@ tr.selected-realm:hover {
 #trainings tbody tr:first-child td:nth-child(3),
 #trainings tbody tr:not(:first-child) td:nth-child(2) {
    text-align: right;
+}
+
+/******************** “Messages” module *******************************/
+
+#messages-table tr {
+   cursor: pointer;
+}
+#messages-table tr.unread {
+   font-weight: bold;
 }
 
 /********************** miscellaneous *********************************/
