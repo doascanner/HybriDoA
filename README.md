@@ -21,6 +21,7 @@ Actuellement réalisé :
 - Chance de Fortuna / Salle des coffres
 - Affichage de la carte (ébauche)
 - Liste (rudimentaire) des entraînements en cours
+- lecture des messages
 
 
 Guide d'installation
