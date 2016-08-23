@@ -276,7 +276,7 @@ switch (currentHost) {
             if (origin !== wonderhillOrigin) return;
          } else {
             var regexp =
-               /^https:\/\/realm\d+\.c\d+\.castle\.wonderhill\.com$/;
+               /^https:\/\/realm\d+\.c\d+\.castle\.rykaiju\.com$/;
             if (!origin.match(regexp)) return;
             wonderhillOrigin = origin;
          }
